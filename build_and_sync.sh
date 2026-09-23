@@ -3,6 +3,35 @@ set -e
 if pgrep -f "orca-slicer" >/dev/null; then
   echo "FEHLER: Orca laeuft noch - schliessen, dann erneut bauen."; exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Waechter: baut dieses Skript wirklich DIESEN Baum?
+#
+# Gefunden 2026-09-23. Eine vollstaendige Kopie des Baums nach
+# ~/Orca_Dev_Import nimmt build/ mit, und dort stehen ABSOLUTE Pfade auf den
+# Originalbaum - allein in CMakeCache.txt 237 Zeilen. cmake meldet das als
+# Fehler, bricht aber NICHT ab; ninja prueft daraufhin die Quellen des
+# ORIGINALS, findet sie unveraendert und meldet "no work to do". Danach sagte
+# dieses Skript "OK: gebaut" - und uebersetzt war nichts.
+#
+# Ein Bauskript, das den falschen Baum baut und Erfolg meldet, ist
+# schlimmer als eines, das gar nicht baut.
+# ---------------------------------------------------------------------------
+BAUM=$(cd "$(dirname "$0")" && pwd -P)
+CACHE="$BAUM/build/CMakeCache.txt"
+if [ -f "$CACHE" ]; then
+  HEIM=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$CACHE")
+  if [ "$HEIM" != "$BAUM" ]; then
+    echo "FEHLER: build/ gehoert zu $HEIM,"
+    echo "        dieses Skript liegt in  $BAUM."
+    echo "        Ein Bau hier wuerde den anderen Baum uebersetzen und"
+    echo "        trotzdem Erfolg melden. Abbruch."
+    exit 1
+  fi
+else
+  echo "WARNUNG: $CACHE fehlt - build/ ist nicht konfiguriert."
+fi
+
 cd ~/Orca_Dev
 cmake --build build --config Release --target OrcaSlicer
 echo "OK: gebaut ($(date +%H:%M:%S)). package/bin ist Symlink - nichts zu kopieren."
