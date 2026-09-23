@@ -8974,6 +8974,99 @@ std::string bbs_3mf_get_thumbnail(const char *path)
     return data;
 }
 
+// MakerBot / UltiMaker Fork: read the printer a 3MF was made for without
+// loading the model. The importer above wants a Model, a PlateDataPtrs and a
+// DynamicPrintConfig before it will look at anything; this wants the archive
+// directory and one member out of it, which costs milliseconds even on a
+// 26 MB file.
+//
+// Members are matched the same case insensitive way _load_model_from_archive
+// matches them, rather than through mz_zip_reader_locate_file, so the two
+// paths cannot disagree about which member is the project config.
+bool bbs_3mf_read_printer_origin(const std::string& path, ThreeMfPrinterOrigin& origin)
+{
+    origin = ThreeMfPrinterOrigin();
+
+    // The archive helpers are shared with the importer, which runs under the
+    // "C" locale.
+    CNumericLocalesSetter locales_setter;
+
+    mz_zip_archive archive;
+    mz_zip_zero_struct(&archive);
+
+    struct close_lock
+    {
+        mz_zip_archive* archive;
+        ~close_lock() { if (archive != nullptr) close_zip_reader(archive); }
+    } lock{&archive};
+
+    if (!open_zip_reader(&archive, path))
+        return false;
+
+    mz_uint                  num_entries = mz_zip_reader_get_num_files(&archive);
+    mz_zip_archive_file_stat stat;
+    bool                     found = false;
+    for (mz_uint i = 0; i < num_entries; ++i) {
+        if (!mz_zip_reader_file_stat(&archive, i, &stat))
+            continue;
+        std::string name(stat.m_filename);
+        std::replace(name.begin(), name.end(), '\\', '/');
+        if (boost::algorithm::iequals(name, BBS_PROJECT_CONFIG_FILE)) {
+            found = true;
+            break;
+        }
+    }
+    if (!found || stat.m_uncomp_size == 0)
+        return false;
+
+    std::string buffer((size_t) stat.m_uncomp_size, 0);
+    if (!mz_zip_reader_extract_file_to_mem(&archive, stat.m_filename, (void*) buffer.data(),
+                                           (size_t) stat.m_uncomp_size, 0))
+        return false;
+
+    nlohmann::json j;
+    try {
+        j = nlohmann::json::parse(buffer);
+    } catch (const std::exception& e) {
+        BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": " << path
+                                   << " carries an unreadable project config: " << e.what();
+        return false;
+    }
+    if (!j.is_object())
+        return false;
+
+    origin.has_project_config = true;
+
+    // Orca writes most of these as a one element array, some as a bare string.
+    auto as_string = [&j](const char* key) -> std::string {
+        auto it = j.find(key);
+        if (it == j.end())
+            return std::string();
+        if (it->is_string())
+            return it->get<std::string>();
+        if (it->is_array() && !it->empty() && it->front().is_string())
+            return it->front().get<std::string>();
+        return std::string();
+    };
+
+    origin.printer_model       = as_string("printer_model");
+    origin.printer_variant     = as_string("printer_variant");
+    origin.printer_settings_id = as_string("printer_settings_id");
+    origin.print_settings_id   = as_string("print_settings_id");
+
+    auto nozzles = j.find("nozzle_diameter");
+    if (nozzles != j.end() && nozzles->is_array())
+        origin.nozzle_count = nozzles->size();
+
+    auto colours = j.find("filament_colour");
+    if (colours != j.end() && colours->is_array())
+        for (const auto& colour : *colours)
+            if (colour.is_string())
+                origin.filament_colours.emplace_back(colour.get<std::string>());
+
+    return true;
+}
+
 bool load_gcode_3mf_from_stream(std::istream &data, DynamicPrintConfig *config, Model *model, PlateDataPtrs *plate_data_list, Semver *file_version)
 {
     CNumericLocalesSetter locales_setter;

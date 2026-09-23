@@ -618,6 +618,18 @@ enum class LoadType : unsigned char
     LoadConfig
 };
 
+// MakerBot / UltiMaker Fork: how a 3MF relates to the printer that is already
+// selected. NotStated covers both a file with no metadata at all and a file
+// whose project config names no printer -- in neither case is there anything
+// to decide, and the answer must not be guessed.
+enum class PrinterOriginMatch : unsigned char
+{
+    NotStated,
+    SamePrinter,
+    OtherNozzle,
+    OtherPrinter
+};
+
 class SlicedInfo : public wxStaticBoxSizer
 {
 public:
@@ -12652,7 +12664,9 @@ int Plater::new_project(bool skip_confirm, bool silent, const wxString& project_
     return wxID_YES;
 }
 
-LoadType determine_load_type(std::string filename, std::string override_setting = "");
+LoadType determine_load_type(std::string filename, std::string override_setting = "",
+                             const ThreeMfPrinterOrigin &origin       = ThreeMfPrinterOrigin(),
+                             PrinterOriginMatch          origin_match = PrinterOriginMatch::NotStated);
 
 // BBS: FIXME, missing resotre logic
 void Plater::load_project(wxString const& filename2,
@@ -14743,11 +14757,15 @@ private:
     bool              m_remember_choice{false};
 
 public:
-    ProjectDropDialog(const std::string &filename);
+    ProjectDropDialog(const std::string &filename, const ThreeMfPrinterOrigin &origin,
+                      PrinterOriginMatch origin_match);
 
     wxPanel *     m_top_line;
     wxStaticText *m_fname_title;
     wxStaticText *m_fname_f;
+    // MakerBot / UltiMaker Fork: the line that names the printer the file was
+    // made for. Stays null when the file names none.
+    wxStaticText *m_origin_f{nullptr};
     StaticBox * m_panel_select;
 
     void      on_select_ok(wxCommandEvent &event);
@@ -14762,7 +14780,8 @@ protected:
     void on_dpi_changed(const wxRect &suggested_rect) override;
 };
 
-ProjectDropDialog::ProjectDropDialog(const std::string &filename)
+ProjectDropDialog::ProjectDropDialog(const std::string &filename, const ThreeMfPrinterOrigin &origin,
+                                     PrinterOriginMatch origin_match)
     : DPIDialog(static_cast<wxWindow *>(wxGetApp().mainframe),
                 wxID_ANY,
                 from_u8((boost::format(_utf8(L("Drop project file")))).str()),
@@ -14798,6 +14817,50 @@ ProjectDropDialog::ProjectDropDialog(const std::string &filename)
     m_sizer_main->AddSpacer(FromDIP(10));
     m_sizer_main->Add(m_fname_f    , 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(20));
     m_sizer_main->AddSpacer(FromDIP(10));
+
+    // MakerBot / UltiMaker Fork: name both machines -- in the running text,
+    // not in the radio labels.
+    //
+    // Measured on 2026-09-23: a label carrying a printer name was cut off at
+    // the dialog edge ("... and stay on Maker"). No width is safe, because a
+    // preset name can be any length -- "MakerBot Method X Carbon Fiber 0.4
+    // nozzle" is a real one. Running text wraps, a Button label does not, so
+    // the names belong in the text and the labels stay as upstream wrote them.
+    if (origin_match == PrinterOriginMatch::OtherPrinter || origin_match == PrinterOriginMatch::OtherNozzle) {
+        wxString own_printer;
+        wxString own_variant;
+        if (PresetBundle *bundle = wxGetApp().preset_bundle) {
+            const Preset &printer = bundle->printers.get_edited_preset();
+            own_printer           = from_u8(printer.name);
+            if (const ConfigOptionString *variant = printer.config.option<ConfigOptionString>("printer_variant"))
+                own_variant = from_u8(variant->value);
+        }
+
+        wxString origin_text;
+        if (origin_match == PrinterOriginMatch::OtherNozzle) {
+            // Same machine, different nozzle. Calling that "another printer"
+            // would be wrong: the machine is the one standing in the room.
+            // What differs is the preset, the nozzle diameter it carries and
+            // every line width and speed derived from it.
+            origin_text = wxString::Format(_L("This file was made for the same printer with a different nozzle: the file says %s mm, your preset says %s mm."),
+                                           from_u8(origin.printer_variant), own_variant);
+        } else {
+            const wxString file_printer = from_u8(origin.printer_variant.empty() ?
+                                                      origin.printer_model :
+                                                      origin.printer_model + " (" + origin.printer_variant + " mm)");
+            origin_text = wxString::Format(_L("This file was made for %s."), file_printer);
+        }
+        if (!own_printer.empty())
+            origin_text += " " + wxString::Format(_L("Opening it as a project replaces your printer preset %s, and with it the nozzle diameter and the process settings. Importing the geometry only keeps yours."), own_printer);
+
+        m_origin_f = new wxStaticText(this, wxID_ANY, origin_text);
+        m_origin_f->SetFont(::Label::Body_14);
+        m_origin_f->SetMaxSize(wxSize(FromDIP(360), -1));
+        m_origin_f->Wrap(FromDIP(360));
+        m_origin_f->SetForegroundColour(wxColour("#363636"));
+        m_sizer_main->Add(m_origin_f, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(20));
+        m_sizer_main->AddSpacer(FromDIP(10));
+    }
 
     auto radio_group = new RadioGroup(this, {
         _L("Open as project"),     // 0
@@ -15056,7 +15119,69 @@ bool Plater::load_files(const wxArrayString& filenames)
     return res;
 }
 
-LoadType determine_load_type(std::string filename, std::string override_setting)
+// MakerBot / UltiMaker Fork: fold a printer name so that two spellings of the
+// same machine compare equal. Case and repeated blanks are the two
+// differences seen in the wild; nothing else is touched, because anything
+// else would start guessing.
+static std::string fold_printer_name(const std::string &name)
+{
+    std::string out = boost::algorithm::trim_copy(name);
+    boost::algorithm::to_lower(out);
+    out.erase(std::unique(out.begin(), out.end(), [](char a, char b) { return a == ' ' && b == ' '; }), out.end());
+    return out;
+}
+
+// MakerBot / UltiMaker Fork: does this file belong to the printer that is
+// already selected?
+//
+// The model is compared, not the preset. A preset can be renamed or copied at
+// any time -- "... - Kopieren" and "Z18_2 ..." both turned up among real
+// files -- so its name says nothing about the machine. The nozzle is asked
+// separately: a file for the 0.4 head of the machine standing in front of you
+// was not made for another printer, and saying so would be wrong.
+static PrinterOriginMatch compare_printer_origin(const ThreeMfPrinterOrigin &origin)
+{
+    std::string        own_model;
+    std::string        own_variant;
+    PrinterOriginMatch verdict = PrinterOriginMatch::NotStated;
+
+    // Read the selected printer even when the file names none. The log line
+    // below is the only place this decision can be checked from outside, and
+    // a reader has to be able to tell "the file says nothing" from "your
+    // printer could not be read". Blanking both sides looks the same.
+    if (PresetBundle *bundle = wxGetApp().preset_bundle) {
+        const DynamicPrintConfig &cfg     = bundle->printers.get_edited_preset().config;
+        const ConfigOptionString *model   = cfg.option<ConfigOptionString>("printer_model");
+        const ConfigOptionString *variant = cfg.option<ConfigOptionString>("printer_variant");
+        if (model != nullptr)
+            own_model = model->value;
+        if (variant != nullptr)
+            own_variant = variant->value;
+    }
+
+    if (origin.names_a_printer() && !own_model.empty()) {
+        if (fold_printer_name(origin.printer_model) != fold_printer_name(own_model))
+            verdict = PrinterOriginMatch::OtherPrinter;
+        // Same machine. A missing variant on either side is not a disagreement.
+        else if (!own_variant.empty() && !origin.printer_variant.empty() &&
+                 fold_printer_name(origin.printer_variant) != fold_printer_name(own_variant))
+            verdict = PrinterOriginMatch::OtherNozzle;
+        else
+            verdict = PrinterOriginMatch::SamePrinter;
+    }
+
+    // One line saying what was compared and what came out. Without it a wrong
+    // answer here is invisible: the dialog simply does not appear, and nothing
+    // in the log tells "matched" apart from "never even asked".
+    static const char *verdict_names[] = {"NotStated", "SamePrinter", "OtherNozzle", "OtherPrinter"};
+    BOOST_LOG_TRIVIAL(info) << "3mf printer origin: file '" << origin.printer_model << "' / '"
+                            << origin.printer_variant << "' against selected '" << own_model << "' / '"
+                            << own_variant << "' -> " << verdict_names[(int) verdict];
+    return verdict;
+}
+
+LoadType determine_load_type(std::string filename, std::string override_setting, const ThreeMfPrinterOrigin &origin,
+                             PrinterOriginMatch origin_match)
 {
     std::string setting;
 
@@ -15069,7 +15194,7 @@ LoadType determine_load_type(std::string filename, std::string override_setting)
     if (setting == OPTION_PROJECT_LOAD_BEHAVIOUR_LOAD_GEOMETRY) {
         return LoadType::LoadGeometry;
     } else if (setting == OPTION_PROJECT_LOAD_BEHAVIOUR_ALWAYS_ASK) {
-        ProjectDropDialog dlg(filename);
+        ProjectDropDialog dlg(filename, origin, origin_match);
         if (dlg.ShowModal() == wxID_OK) {
             int      choice    = dlg.get_action();
             LoadType load_type = static_cast<LoadType>(choice);
@@ -15093,9 +15218,33 @@ bool Plater::open_3mf_file(const fs::path &file_path)
         return false;
     }
 
+    // MakerBot / UltiMaker Fork: ask the file which printer it was made for
+    // before deciding whether the user has anything to decide. This reads one
+    // small member out of the archive and touches nothing else.
+    ThreeMfPrinterOrigin origin;
+    bbs_3mf_read_printer_origin(file_path.string(), origin);
+    const PrinterOriginMatch origin_match = compare_printer_origin(origin);
+
     bool not_empty_plate = !model().objects.empty();
     bool load_setting_ask_when_relevant = wxGetApp().app_config->get(SETTING_PROJECT_LOAD_BEHAVIOUR) == OPTION_PROJECT_LOAD_BEHAVIOUR_ASK_WHEN_RELEVANT;
-    LoadType load_type = determine_load_type(filename, (not_empty_plate && load_setting_ask_when_relevant) ? OPTION_PROJECT_LOAD_BEHAVIOUR_ALWAYS_ASK : "");
+
+    // "Ask when relevant" used to mean one thing only: the plate is not empty.
+    // Drop a file on an empty plate and the project opens without a word --
+    // and it brings its own printer, which is how a file from a sharing
+    // platform replaces the machine the user had selected, silently. A file
+    // made for another printer is as relevant as a plate that is not empty.
+    //
+    // A file that matches, and a file that names no printer at all, are left
+    // exactly as they were: no new question is asked anywhere.
+    bool made_for_another_printer = origin_match == PrinterOriginMatch::OtherPrinter ||
+                                    origin_match == PrinterOriginMatch::OtherNozzle;
+    bool ask_is_relevant = not_empty_plate || made_for_another_printer;
+
+    LoadType load_type = determine_load_type(filename,
+                                             (ask_is_relevant && load_setting_ask_when_relevant) ?
+                                                 OPTION_PROJECT_LOAD_BEHAVIOUR_ALWAYS_ASK :
+                                                 "",
+                                             origin, origin_match);
 
     if (load_type == LoadType::Unknown) return false;
 

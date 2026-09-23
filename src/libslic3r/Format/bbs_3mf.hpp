@@ -258,6 +258,39 @@ extern std::string bbs_3mf_get_thumbnail(const char * path);
 extern bool load_gcode_3mf_from_stream(std::istream & data, DynamicPrintConfig* config, Model* model, PlateDataPtrs* plate_data_list,
        Semver* file_version);
 
+// MakerBot / UltiMaker Fork: what a 3MF says about the printer it was made
+// for. Read from Metadata/project_settings.config alone -- no model parse, no
+// presets touched, no configuration applied.
+//
+// Measured on 22 real files on 2026-09-23: 17 name a printer, 5 do not. Four
+// of those five carry no Metadata directory at all, the fifth carries a
+// project config that names no printer but still carries a nozzle diameter
+// and a filament colour. Both cases leave printer_model empty, and a caller
+// must not pretend it knows the machine.
+//
+// The model name is the only key worth comparing. The preset name is user
+// editable: among those files it appeared as "WonderMaker ZR Ultra S 0.4
+// nozzle - Kopieren" and as "Z18_2 MakerBot Replicator Z18 0.4 nozzle". The
+// spelling of the model is not stable either -- the same Replicator Z18 was
+// written once as "MakerBot Replicator Z18" and once, by a third party
+// profile, as "Makerbot Replicator Z18" -- so a comparison has to fold case.
+struct ThreeMfPrinterOrigin
+{
+    bool        has_project_config = false;
+    std::string printer_model;
+    std::string printer_variant;
+    std::string printer_settings_id;
+    std::string print_settings_id;
+    size_t      nozzle_count = 0;
+    std::vector<std::string> filament_colours;
+
+    bool names_a_printer() const { return !printer_model.empty(); }
+};
+
+// Returns false when the file cannot be opened, carries no project config, or
+// the project config is not readable JSON. origin is cleared in every case.
+extern bool bbs_3mf_read_printer_origin(const std::string& path, ThreeMfPrinterOrigin& origin);
+
 
 //BBS: add plate data list related logic
 // add backup logic
