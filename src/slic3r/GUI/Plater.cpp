@@ -13004,6 +13004,11 @@ LoadType determine_load_type(std::string filename, std::string override_setting 
                              const ThreeMfPrinterOrigin &origin       = ThreeMfPrinterOrigin(),
                              PrinterOriginMatch          origin_match = PrinterOriginMatch::NotStated);
 
+// MakerBot / UltiMaker Fork: how a 3MF should be opened, decided with the file's
+// own printer in hand. Defined next to open_3mf_file(), declared here because
+// load_project() sits earlier in the file and asks the same question.
+static LoadType decide_3mf_load_type(const boost::filesystem::path &file_path, bool plate_is_empty);
+
 // BBS: FIXME, missing resotre logic
 void Plater::load_project(wxString const& filename2,
     wxString const& originfile)
@@ -13062,10 +13067,30 @@ void Plater::load_project(wxString const& filename2,
     } else if (originfile != "-") {
         strategy = strategy | LoadStrategy::Restore;
     } else {
-        switch (determine_load_type(filename.ToStdString())) {
+        // MakerBot / UltiMaker Fork: the same question the drag and drop way
+        // asks, with the file's own printer in it. Four ways end up here --
+        // Ctrl+O, the open button in the tool bar, "Recent projects" and the
+        // MakerWorld download -- and until now all four asked without ever
+        // naming the printer the file was made for, and without our wider
+        // test of whether the question is worth asking at all.
+        //
+        // The model is still intact at this point. close_with_confirm() only
+        // asks about saving; reset() happens further down. So "the plate is
+        // not empty" still means what it says here.
+        switch (decide_3mf_load_type(path, model().objects.empty())) {
             case LoadType::OpenProject: break; // Do nothing
             case LoadType::LoadGeometry:; strategy = LoadStrategy::LoadModel; break;
-            default: return; // User cancelled
+            default:
+                // The user cancelled.
+                //
+                // m_loading_project was set true above and is cleared only at
+                // the end of this function, so returning here left it true for
+                // the rest of the session: every later "open project" then
+                // returned at once with "current loading other project, return
+                // directly" and did nothing at all. That was rare while the
+                // question itself was rare. It is not rare any more.
+                m_loading_project = false;
+                return;
         }
     }
     bool load_restore = strategy & LoadStrategy::Restore;
@@ -15547,22 +15572,31 @@ LoadType determine_load_type(std::string filename, std::string override_setting,
     }
 }
 
-bool Plater::open_3mf_file(const fs::path &file_path)
+// MakerBot / UltiMaker Fork: how a 3MF should be opened, decided with the
+// file's own printer in hand.
+//
+// Both ways into a 3MF ask here -- the drag and drop way through
+// open_3mf_file(), and "open project" through load_project() -- so the question
+// is worded the same and weighed the same wherever it comes up. It used to live
+// inside open_3mf_file() alone, which is why four ways of opening a project
+// never saw it.
+//
+// plate_is_empty is passed in rather than read from the model, because the two
+// callers stand at different points in the work and each knows its own answer.
+static LoadType decide_3mf_load_type(const fs::path &file_path, bool plate_is_empty)
 {
-    std::string filename = encode_path(file_path.filename().string().c_str());
-    if (!boost::algorithm::iends_with(filename, ".3mf")) {
-        return false;
-    }
+    const std::string filename = encode_path(file_path.filename().string().c_str());
 
-    // MakerBot / UltiMaker Fork: ask the file which printer it was made for
-    // before deciding whether the user has anything to decide. This reads one
-    // small member out of the archive and touches nothing else.
+    // Reads one small member out of the archive and touches nothing else. A
+    // file that is not a 3MF, or one that names no printer, comes back
+    // NotStated, and the answer is then exactly what it was before this
+    // function existed.
     ThreeMfPrinterOrigin origin;
     bbs_3mf_read_printer_origin(file_path.string(), origin);
     const PrinterOriginMatch origin_match = compare_printer_origin(origin);
 
-    bool not_empty_plate = !model().objects.empty();
-    bool load_setting_ask_when_relevant = wxGetApp().app_config->get(SETTING_PROJECT_LOAD_BEHAVIOUR) == OPTION_PROJECT_LOAD_BEHAVIOUR_ASK_WHEN_RELEVANT;
+    const bool ask_when_relevant = wxGetApp().app_config->get(SETTING_PROJECT_LOAD_BEHAVIOUR) ==
+                                   OPTION_PROJECT_LOAD_BEHAVIOUR_ASK_WHEN_RELEVANT;
 
     // "Ask when relevant" used to mean one thing only: the plate is not empty.
     // Drop a file on an empty plate and the project opens without a word --
@@ -15572,15 +15606,25 @@ bool Plater::open_3mf_file(const fs::path &file_path)
     //
     // A file that matches, and a file that names no printer at all, are left
     // exactly as they were: no new question is asked anywhere.
-    bool made_for_another_printer = origin_match == PrinterOriginMatch::OtherPrinter ||
-                                    origin_match == PrinterOriginMatch::OtherNozzle;
-    bool ask_is_relevant = not_empty_plate || made_for_another_printer;
+    const bool made_for_another_printer = origin_match == PrinterOriginMatch::OtherPrinter ||
+                                          origin_match == PrinterOriginMatch::OtherNozzle;
+    const bool ask_is_relevant = ! plate_is_empty || made_for_another_printer;
 
-    LoadType load_type = determine_load_type(filename,
-                                             (ask_is_relevant && load_setting_ask_when_relevant) ?
-                                                 OPTION_PROJECT_LOAD_BEHAVIOUR_ALWAYS_ASK :
-                                                 "",
-                                             origin, origin_match);
+    return determine_load_type(filename,
+                               (ask_is_relevant && ask_when_relevant) ?
+                                   OPTION_PROJECT_LOAD_BEHAVIOUR_ALWAYS_ASK :
+                                   "",
+                               origin, origin_match);
+}
+
+bool Plater::open_3mf_file(const fs::path &file_path)
+{
+    std::string filename = encode_path(file_path.filename().string().c_str());
+    if (!boost::algorithm::iends_with(filename, ".3mf")) {
+        return false;
+    }
+
+    const LoadType load_type = decide_3mf_load_type(file_path, model().objects.empty());
 
     if (load_type == LoadType::Unknown) return false;
 
