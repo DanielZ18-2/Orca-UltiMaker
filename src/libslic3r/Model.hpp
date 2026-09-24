@@ -428,6 +428,9 @@ public:
     bool                    is_mm_painted() const;
     // Checks if any of object volume is painted using the fuzzy skin painting gizmo.
     bool                    is_fuzzy_skin_painted() const;
+    // MakerBot / UltiMaker Fork: renumber every extruder this object and its
+    // volumes refer to -- own config, volume configs and the painting.
+    bool                    remap_extruders(const std::vector<int> &mapping);
     // This object may have a varying layer height by painting or by a table.
     // Even if true is returned, the layer height profile may be "flat" with no difference to default layering.
     bool                    has_custom_layering() const
@@ -759,6 +762,15 @@ public:
     void shrink_to_fit() { m_data.triangles_to_split.shrink_to_fit(); m_data.bitstream.shrink_to_fit(); }
     bool equals(const FacetsAnnotation &other) const;
 
+    // MakerBot / UltiMaker Fork: renumber the extruders this painting refers
+    // to. mapping[old] = new, indexed by the state value, which is the
+    // 1 based filament index (TriangleSelector.hpp: Extruder1 = 1 ...
+    // Extruder16 = 16). State 0 means "take the extruder of the volume" and
+    // belongs to the volume's own config, not here.
+    // Returns false and changes nothing when the bitstream is malformed or
+    // the result would not carry exactly the same leaves.
+    bool remap_extruder_states(const std::vector<int> &mapping);
+
 private:
     // Constructors to be only called by derived classes.
     // Default constructor to assign a unique ID.
@@ -1018,6 +1030,10 @@ public:
     // Orca: Implement prusa's filament shrink compensation approach
     // Returns 0-based indices of extruders painted by multi-material painting gizmo.
      std::vector<size_t> get_extruders_from_multi_material_painting() const;
+
+    // MakerBot / UltiMaker Fork: renumber the extruders this volume refers
+    // to -- its own filament and its painting. See ModelObject::remap_extruders.
+    bool remap_extruders(const std::vector<int> &mapping);
 
 protected:
 	friend class Print;

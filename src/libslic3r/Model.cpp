@@ -1358,6 +1358,190 @@ bool ModelObject::is_mm_painted() const
     return std::any_of(this->volumes.cbegin(), this->volumes.cend(), [](const ModelVolume *mv) { return mv->is_mm_painted(); });
 }
 
+// MakerBot / UltiMaker Fork: count the leaf states of a painting bitstream.
+//
+// The walk is the one TriangleSplittingData::update_used_states() performs:
+// one nibble per node, a split node when the low two bits are set, otherwise
+// a leaf whose state sits in the high two bits, or -- from state 3 upwards --
+// in a following nibble. Returns false on a stream that does not walk out
+// evenly, which is the only way a re-encoding error can show itself.
+static bool count_painting_states(const std::vector<bool>                                        &bitstream,
+                                  const std::vector<TriangleSelector::TriangleBitStreamMapping> &triangles,
+                                  std::map<int, size_t>                                         &counts)
+{
+    counts.clear();
+    if ((bitstream.size() % 4) != 0)
+        return false;
+
+    for (size_t t = 0; t < triangles.size(); ++t) {
+        size_t       idx = size_t(triangles[t].bitstream_start_idx);
+        const size_t end = (t + 1 < triangles.size()) ? size_t(triangles[t + 1].bitstream_start_idx) : bitstream.size();
+        if (idx > end || end > bitstream.size())
+            return false;
+
+        auto read_nibble = [&bitstream, &idx]() -> uint8_t {
+            uint8_t code = 0;
+            for (size_t bit = 0; bit < 4; ++bit)
+                code |= uint8_t(bitstream[idx++]) << bit;
+            return code;
+        };
+
+        while (idx < end) {
+            if (idx + 4 > end)
+                return false;
+            const uint8_t code = read_nibble();
+            if ((code & 0b11) != 0)
+                continue;
+            int state = 0;
+            if ((code & 0b1100) == 0b1100) {
+                if (idx + 4 > end)
+                    return false;
+                state = int(read_nibble()) + 3;
+            } else {
+                state = int(code) >> 2;
+            }
+            ++counts[state];
+        }
+    }
+    return true;
+}
+
+// MakerBot / UltiMaker Fork: renumber the extruders a painting refers to.
+//
+// Re-encoding changes the length of a leaf (states 0..2 take one nibble,
+// states from 3 upwards take two), so every triangle's start index is
+// recomputed.
+//
+// The check at the end is part of this function, not of a test that may or
+// may not be run: the WRITTEN stream is decoded again and its leaves must be
+// exactly the leaves the mapping promises. That catches an encoding error,
+// which a comparison against the mapping alone never could. The same check
+// ran offline against four real 3MF files before this was written, among
+// them one with 300 239 painted triangles.
+bool FacetsAnnotation::remap_extruder_states(const std::vector<int> &mapping)
+{
+    if (m_data.triangles_to_split.empty() || m_data.bitstream.empty())
+        return false;
+
+    std::map<int, size_t> before;
+    if (! count_painting_states(m_data.bitstream, m_data.triangles_to_split, before))
+        return false;
+
+    std::vector<bool> out;
+    out.reserve(m_data.bitstream.size());
+    std::vector<TriangleSelector::TriangleBitStreamMapping> starts;
+    starts.reserve(m_data.triangles_to_split.size());
+
+    auto write_nibble = [&out](uint8_t code) {
+        for (size_t bit = 0; bit < 4; ++bit)
+            out.emplace_back((code & (1 << bit)) != 0);
+    };
+    auto remap_state = [&mapping](int state) {
+        return (state >= 0 && state < int(mapping.size())) ? mapping[state] : state;
+    };
+
+    for (size_t t = 0; t < m_data.triangles_to_split.size(); ++t) {
+        size_t       idx = size_t(m_data.triangles_to_split[t].bitstream_start_idx);
+        const size_t end = (t + 1 < m_data.triangles_to_split.size()) ?
+                               size_t(m_data.triangles_to_split[t + 1].bitstream_start_idx) :
+                               m_data.bitstream.size();
+        starts.emplace_back(m_data.triangles_to_split[t].triangle_idx, int(out.size()));
+
+        auto read_nibble = [this, &idx]() -> uint8_t {
+            uint8_t code = 0;
+            for (size_t bit = 0; bit < 4; ++bit)
+                code |= uint8_t(m_data.bitstream[idx++]) << bit;
+            return code;
+        };
+
+        while (idx < end) {
+            const uint8_t code = read_nibble();
+            if ((code & 0b11) != 0) {
+                // A split node carries no state. It is copied unchanged.
+                write_nibble(code);
+                continue;
+            }
+            int state = 0;
+            if ((code & 0b1100) == 0b1100) {
+                if (idx + 4 > end)
+                    return false;
+                state = int(read_nibble()) + 3;
+            } else {
+                state = int(code) >> 2;
+            }
+            const int remapped = remap_state(state);
+            if (remapped < 0 || remapped > int(EnforcerBlockerType::ExtruderMax))
+                return false;
+            if (remapped <= 2) {
+                write_nibble(uint8_t(remapped << 2));
+            } else {
+                write_nibble(0b1100);
+                write_nibble(uint8_t(remapped - 3));
+            }
+        }
+    }
+
+    std::map<int, size_t> after;
+    if (! count_painting_states(out, starts, after))
+        return false;
+
+    std::map<int, size_t> expected;
+    for (const auto &source : before)
+        expected[remap_state(source.first)] += source.second;
+    if (expected != after) {
+        BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ": the re-encoded painting does not carry the same leaves; nothing changed";
+        return false;
+    }
+
+    m_data.bitstream          = std::move(out);
+    m_data.triangles_to_split = std::move(starts);
+    m_data.reset_used_states();
+    if (! m_data.bitstream.empty())
+        m_data.update_used_states(0);
+    this->touch();
+    return true;
+}
+
+// MakerBot / UltiMaker Fork: renumber the extruders this volume refers to.
+bool ModelVolume::remap_extruders(const std::vector<int> &mapping)
+{
+    bool changed = false;
+
+    if (this->is_mm_painted())
+        changed |= this->mmu_segmentation_facets.remap_extruder_states(mapping);
+
+    if (const ConfigOption *opt = this->config.option("extruder")) {
+        const int own = opt->getInt();
+        if (own > 0 && own < int(mapping.size()) && mapping[own] != own) {
+            this->config.set_key_value("extruder", new ConfigOptionInt(mapping[own]));
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+// MakerBot / UltiMaker Fork: renumber the extruders this object refers to.
+//
+// mapping[old] = new for the 1 based filament indices; index 0 stands for
+// "the extruder of the volume" and must map to itself. A caller that hands in
+// a shorter vector leaves the missing indices untouched.
+bool ModelObject::remap_extruders(const std::vector<int> &mapping)
+{
+    bool changed = false;
+
+    if (const ConfigOption *opt = this->config.option("extruder")) {
+        const int own = opt->getInt();
+        if (own > 0 && own < int(mapping.size()) && mapping[own] != own) {
+            this->config.set_key_value("extruder", new ConfigOptionInt(mapping[own]));
+            changed = true;
+        }
+    }
+    for (ModelVolume *volume : this->volumes)
+        changed |= volume->remap_extruders(mapping);
+
+    return changed;
+}
+
 bool ModelObject::is_fuzzy_skin_painted() const
 {
     return std::any_of(this->volumes.cbegin(), this->volumes.cend(), [](const ModelVolume *mv) { return mv->is_fuzzy_skin_painted(); });

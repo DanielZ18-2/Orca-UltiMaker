@@ -8,6 +8,9 @@
 #include <limits>
 #include <vector>
 #include <string>
+// MakerBot / UltiMaker Fork: used by the colour distance helper below.
+#include <array>
+#include <cmath>
 #include <regex>
 #include <future>
 #include <boost/algorithm/string.hpp>
@@ -169,6 +172,8 @@
 #include "../Utils/OrcaCloudServiceAgent.hpp"
 #include "StepMeshDialog.hpp"
 #include "FilamentMapDialog.hpp"
+// MakerBot / UltiMaker Fork: the colour assignment on 3MF import.
+#include "ColorAssignDialog.hpp"
 #include "CloneDialog.hpp"
 
 #include "DeviceCore/DevFilaSystem.h"
@@ -629,6 +634,154 @@ enum class PrinterOriginMatch : unsigned char
     OtherNozzle,
     OtherPrinter
 };
+
+// MakerBot / UltiMaker Fork: sRGB hex to CIE Lab, D65. Needed to say which of
+// the machine's colours a surplus colour is closest to. RGB distances do not
+// match what the eye calls similar; Lab distances order them well enough to
+// choose, which is all that is asked here.
+static std::array<double, 3> hex_colour_to_lab(const std::string &hex)
+{
+    std::string digits = hex;
+    if (! digits.empty() && digits.front() == '#')
+        digits.erase(digits.begin());
+    if (digits.size() < 6)
+        return {0.0, 0.0, 0.0};
+
+    auto linear = [](double c) {
+        return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+
+    double r = 0.0, g = 0.0, b = 0.0;
+    try {
+        r = linear(double(std::stoi(digits.substr(0, 2), nullptr, 16)) / 255.0);
+        g = linear(double(std::stoi(digits.substr(2, 2), nullptr, 16)) / 255.0);
+        b = linear(double(std::stoi(digits.substr(4, 2), nullptr, 16)) / 255.0);
+    } catch (const std::exception &) {
+        return {0.0, 0.0, 0.0};
+    }
+
+    const double x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+    const double y = (0.2126 * r + 0.7152 * g + 0.0722 * b);
+    const double z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+
+    auto f = [](double v) {
+        return v > 0.008856 ? std::cbrt(v) : (7.787 * v + 16.0 / 116.0);
+    };
+    const double fx = f(x), fy = f(y), fz = f(z);
+    return {116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)};
+}
+
+static double lab_distance(const std::array<double, 3> &a, const std::array<double, 3> &b)
+{
+    return std::sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) +
+                     (a[2] - b[2]) * (a[2] - b[2]));
+}
+
+// MakerBot / UltiMaker Fork: where each filament index goes when a model asks
+// for more colours than the machine has.
+//
+// Indices 1..limit stay where they are. Every index above goes to the nearest
+// of them by colour. "Everything above the limit falls onto the limit" would
+// be simpler and wrong: measured on a real file, a dark red #951E23 is nearer
+// to orange #F78E0E (dE 59.1) than to black #000000 (dE 65.1), and nobody
+// weighed that before this function existed.
+//
+// Index 0 maps to itself: in a painting it means "take the extruder of the
+// volume", and that extruder is remapped with the volume.
+// MakerBot / UltiMaker Fork: how many filaments the selected machine can hold,
+// or 0 when that is not known. Only machines whose flavor says "one filament
+// per head" get a number; see flavor_has_fixed_filament_slots().
+static int printer_filament_limit()
+{
+    PresetBundle *bundle = wxGetApp().preset_bundle;
+    if (bundle == nullptr)
+        return 0;
+
+    const Preset                        &printer = bundle->printers.get_edited_preset();
+    const ConfigOptionEnum<GCodeFlavor> *flavor  = printer.config.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor");
+    if (flavor == nullptr || ! flavor_has_fixed_filament_slots(flavor->value))
+        return 0;
+
+    return bundle->get_printer_extruder_count();
+}
+
+// MakerBot / UltiMaker Fork: how many filaments a machine with FIXED material
+// per extruder can hold -- one filament per extruder, no material changer.
+// 0 for every other machine.
+//
+// Two groups fall in here:
+//
+//  - our own machines, by flavor. Their profiles leave
+//    single_extruder_multi_material at its default, which is TRUE, so the
+//    profile alone would sort a two head Method X into the wrong group. That
+//    default is wrong for them and should be set to 0 in the profiles; until
+//    that is done and tested, the flavor stands in for it.
+//
+//  - everyone else's machines by Orca's own test: not Bambu Lab and
+//    single_extruder_multi_material off. That is exactly the group
+//    Sidebar::show_SEMM_buttons() calls "is_fixed" -- MULTI EXTRUDER /
+//    TOOLCHANGER / IDEX WITH FIXED MATERIAL. Measured on 2026-09-24: a
+//    WonderMaker ZR Ultra S (Orca's own Klipper vendor, four nozzles,
+//    single_extruder_multi_material 0) carried five filaments with no way to
+//    remove one, because Orca hides both list buttons for this whole group.
+//
+// This is deliberately WIDER than printer_filament_limit(). It governs the
+// two list buttons and the guard in add_custom_filament(), where the worst
+// case is a button that does not appear. printer_filament_limit() governs the
+// import, which RENUMBERS A MODEL, and stays on our own flavors until the
+// wider rule has been measured on a machine that is not ours.
+static int fixed_material_slot_count()
+{
+    PresetBundle *bundle = wxGetApp().preset_bundle;
+    if (bundle == nullptr || bundle->is_bbl_vendor())
+        return 0;
+
+    const Preset &printer = bundle->printers.get_edited_preset();
+
+    const ConfigOptionEnum<GCodeFlavor> *flavor = printer.config.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor");
+    const bool ours = flavor != nullptr && flavor_has_fixed_filament_slots(flavor->value);
+
+    const ConfigOptionBool *semm = printer.config.option<ConfigOptionBool>("single_extruder_multi_material");
+    const bool fixed_material = semm != nullptr && ! semm->value;
+
+    if (! ours && ! fixed_material)
+        return 0;
+
+    return bundle->get_printer_extruder_count();
+}
+
+static std::vector<int> build_extruder_mapping(const std::vector<std::string> &colours, int highest, int limit)
+{
+    const int last = std::max(highest, limit);
+    std::vector<int> mapping(size_t(last) + 1, 0);
+    for (int i = 0; i <= last; ++i)
+        mapping[size_t(i)] = i;
+    if (limit < 1)
+        return mapping;
+
+    std::vector<std::array<double, 3>> lab;
+    lab.reserve(colours.size());
+    for (const std::string &colour : colours)
+        lab.emplace_back(hex_colour_to_lab(colour));
+
+    for (int i = limit + 1; i <= highest; ++i) {
+        int target = limit;
+        if (size_t(i - 1) < lab.size()) {
+            double best = std::numeric_limits<double>::max();
+            for (int kept = 1; kept <= limit; ++kept) {
+                if (size_t(kept - 1) >= lab.size())
+                    continue;
+                const double d = lab_distance(lab[size_t(i - 1)], lab[size_t(kept - 1)]);
+                if (d < best) {
+                    best   = d;
+                    target = kept;
+                }
+            }
+        }
+        mapping[size_t(i)] = target;
+    }
+    return mapping;
+}
 
 class SlicedInfo : public wxStaticBoxSizer
 {
@@ -3807,6 +3960,19 @@ void Sidebar::add_custom_filament(wxColour new_col) {
     if (is_new_project_in_gcode3mf()) { return; }
     if (p->combos_filament.size() >= MAXIMUM_EXTRUDER_NUMBER) return;
 
+    // MakerBot / UltiMaker Fork: a machine with one filament per extruder and
+    // no material changer cannot use a slot it does not have.
+    // MAXIMUM_EXTRUDER_NUMBER is 64 and bounds nothing here; the extruder
+    // count does. The bound sits in this function rather than on the button,
+    // because every road to a new filament -- the button, the filament menu,
+    // the custom colour event -- ends here.
+    const int machine_slots = fixed_material_slot_count();
+    if (machine_slots > 0 && int(p->combos_filament.size()) >= machine_slots) {
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": refused, the printer has " << machine_slots
+                                << " extruders and every filament slot is taken";
+        return;
+    }
+
     int         filament_count = p->combos_filament.size() + 1;
     std::string new_color      = new_col.GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
     wxGetApp().preset_bundle->set_num_filaments(filament_count, new_color);
@@ -4321,8 +4487,30 @@ void Sidebar::show_SEMM_buttons()
     bool is_multi  = single_or_bbl && is_multi_material;  // MULTI MATERIAL WITH SINGLE EXTRUDER
     bool is_fixed  = !is_single && !is_multi;             // MULTI EXTRUDER / TOOLCHANGER / IDEX WITH FIXED MATERIAL
 
-    p->m_bpButton_add_filament->Show(single_or_bbl);
-    p->m_bpButton_del_filament->Show(is_multi);
+    // MakerBot / UltiMaker Fork: our printers answer false to
+    // should_show_SEMM_buttons(), and they have to keep doing so -- that flag
+    // also drives the flushing volume button and the SEMM filament menu, and a
+    // machine with fixed heads has neither. The two list buttons are a
+    // separate question. Without them the filament list can only grow: an
+    // import that left a slot behind cannot be undone, and telling the user to
+    // switch to a Bambu Lab printer to get the buttons back is not an answer.
+    //
+    // The group is is_fixed, not our five flavors: a WonderMaker ZR Ultra S is
+    // in exactly the same trap (measured 2026-09-24, five filaments on four
+    // nozzles and no way to remove one), and it is Orca's own machine.
+    //
+    // Adding stops at the number of extruders. A slot beyond that is the
+    // defect this fork set out to fix, and a button is no reason to reopen it.
+    //
+    // This can only ADD buttons: where single_or_bbl is true, is_fixed is
+    // false and nothing below changes.
+    const int  machine_slots = fixed_material_slot_count();
+    const bool can_add       = is_fixed && machine_slots > 0 &&
+                               int(p->combos_filament.size()) < machine_slots;
+    const bool can_delete    = is_fixed && is_multi_material;
+
+    p->m_bpButton_add_filament->Show(single_or_bbl || can_add);
+    p->m_bpButton_del_filament->Show(is_multi || can_delete);
     p->m_flushing_volume_btn->Show(  is_multi);
 
     if (is_multi) {
@@ -6579,6 +6767,154 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             }
                         }
                         int size = extruderIds.size() == 0 ? 0 : *(extruderIds.rbegin());
+
+                        // MakerBot / UltiMaker Fork: the loop below grows the
+                        // filament list to the highest extruder index the model
+                        // uses, bounded only by MAXIMUM_EXTRUDER_NUMBER -- never
+                        // by the machine. Measured on 2026-09-23: a five colour
+                        // file imported as geometry gave a four nozzle
+                        // WonderMaker a fifth filament slot it can never use.
+                        //
+                        // So the model is renumbered down to what the machine
+                        // can do BEFORE the list is grown. Nothing is deleted:
+                        // every painted region keeps its faces, they only share
+                        // a slot. Paket 172 puts this mapping in front of the
+                        // user, changeable row by row; until then it happens
+                        // automatically and says so.
+                        const int machine_slots = printer_filament_limit();
+                        if (load_model && ! load_config && machine_slots > 0 && size > machine_slots) {
+                            ThreeMfPrinterOrigin file_origin;
+                            bbs_3mf_read_printer_origin(path.string(), file_origin);
+
+                            const std::vector<int> mapping =
+                                build_extruder_mapping(file_origin.filament_colours, size, machine_slots);
+
+                            // The whole proposal, not only the part above the
+                            // limit. Paket 174 built this string and never
+                            // printed it, which cost a round trip: a screenshot
+                            // of the dialog cannot say whether a row shows the
+                            // proposal or a choice the user made by hand.
+                            std::string proposed;
+                            for (int i = 1; i <= size; ++i)
+                                proposed += " " + std::to_string(i) + "->" +
+                                            std::to_string(mapping[size_t(i)]);
+
+                            BOOST_LOG_TRIVIAL(info)
+                                << __FUNCTION__ << ": model asks for " << size << " filaments, machine has "
+                                << machine_slots << ", proposal" << proposed;
+
+                            // MakerBot / UltiMaker Fork: let the user assign,
+                            // and give the dialog the printer's slots as the
+                            // set to compare against -- not the file's colours,
+                            // which is what build_extruder_mapping() had to use
+                            // for want of anything better.
+                            std::vector<ColorAssignDialog::Slot> slots;
+                            {
+                                PresetBundle *bundle = wxGetApp().preset_bundle;
+                                const ConfigOptionStrings *slot_colours =
+                                    bundle->project_config.option<ConfigOptionStrings>("filament_colour");
+                                const std::vector<std::string> &slot_names = bundle->filament_presets;
+                                for (int s = 0; s < machine_slots; ++s) {
+                                    ColorAssignDialog::Slot slot;
+                                    if (slot_colours != nullptr && size_t(s) < slot_colours->values.size())
+                                        slot.colour = slot_colours->values[size_t(s)];
+                                    if (size_t(s) < slot_names.size()) {
+                                        slot.preset = slot_names[size_t(s)];
+                                        if (const Preset *fp = bundle->filaments.find_preset(slot_names[size_t(s)]))
+                                            slot.material = fp->config.opt_string("filament_type", 0);
+                                    }
+                                    slots.push_back(slot);
+                                }
+                            }
+
+                            std::vector<int> proposal;
+                            for (int i = 1; i <= size; ++i)
+                                proposal.push_back(mapping[size_t(i)]);
+
+                            ColorAssignDialog assign(q, from_path(path.filename()),
+                                                     file_origin.filament_colours, slots, proposal);
+                            if (assign.ShowModal() == wxID_OK) {
+                                const std::vector<int> chosen = assign.mapping();
+
+                                bool remapped = false;
+                                for (ModelObject *object : model.objects)
+                                    remapped |= object->remap_extruders(chosen);
+
+                                // What the printer's slots should carry now.
+                                // The dialog has already settled the question:
+                                // a colour the user picked by hand beats the
+                                // model's, the model's beats what the slot had.
+                                // This only writes the answer down.
+                                //
+                                // All three keys are written, not just
+                                // filament_colour: that is what Orca's own
+                                // picker does (PlaterPresetComboBox::
+                                // sync_colour_config), and a slot that carried
+                                // a two colour gradient would otherwise keep
+                                // drawing the gradient over the new colour.
+                                const std::vector<std::string> final_colours = assign.final_slot_colours();
+                                {
+                                    DynamicPrintConfig &cfg = wxGetApp().preset_bundle->project_config;
+                                    auto *opt_colour = cfg.option<ConfigOptionStrings>("filament_colour");
+                                    auto *opt_multi  = cfg.option<ConfigOptionStrings>("filament_multi_colour");
+                                    auto *opt_type   = cfg.option<ConfigOptionStrings>("filament_colour_type");
+                                    for (size_t s = 0; s < final_colours.size(); ++s) {
+                                        if (final_colours[s].empty())
+                                            continue;
+                                        if (opt_colour != nullptr && s < opt_colour->values.size())
+                                            opt_colour->values[s] = final_colours[s];
+                                        if (opt_multi != nullptr && s < opt_multi->values.size())
+                                            opt_multi->values[s] = final_colours[s];
+                                        if (opt_type != nullptr && s < opt_type->values.size())
+                                            opt_type->values[s] = "1"; // one colour, no gradient
+                                    }
+                                }
+
+                                // The list only ever grew. A slot the machine
+                                // does not have survives every import once it
+                                // exists, so it is taken away here.
+                                const int had = int(sidebar->combos_filament().size());
+                                if (had > machine_slots)
+                                    wxGetApp().preset_bundle->set_num_filaments(unsigned(machine_slots), std::string());
+                                wxGetApp().plater()->on_filament_count_change(machine_slots);
+
+                                // The sidebar draws each filament's colour into
+                                // the combo box once, when the combo is built.
+                                // Nothing above redraws it:
+                                // Sidebar::on_filament_count_change() returns
+                                // immediately when the count did not change
+                                // ("if (num_filaments == choices.size())
+                                // return;"), and where it does change it calls
+                                // update() only on the combos it had to create.
+                                // A slot whose colour we just rewrote keeps the
+                                // old patch.
+                                //
+                                // Measured 2026-09-24 on a Method X: blue
+                                // picked in the dialog, blue on the plate,
+                                // green still in the sidebar.
+                                for (PlaterPresetComboBox *combo : sidebar->combos_filament())
+                                    if (combo != nullptr)
+                                        combo->update();
+
+                                // What the user actually settled on, so that the
+                                // log answers "proposal or choice?" without a
+                                // screenshot.
+                                std::string taken;
+                                for (int i = 1; i <= size; ++i)
+                                    taken += " " + std::to_string(i) + "->" +
+                                             std::to_string(size_t(i) < chosen.size() ? chosen[size_t(i)] : i);
+
+                                BOOST_LOG_TRIVIAL(info)
+                                    << __FUNCTION__ << ": assigned, remapped=" << remapped << ", adopt_colours="
+                                    << assign.adopt_colours() << ", slot colours picked by hand="
+                                    << assign.slot_colours_edited() << ", filament list " << had << " -> "
+                                    << machine_slots << ", chosen" << taken;
+                                size = machine_slots;
+                            } else {
+                                BOOST_LOG_TRIVIAL(info)
+                                    << __FUNCTION__ << ": left alone -- the user cancelled the colour assignment";
+                            }
+                        }
 
                         int filament_size = sidebar->combos_filament().size();
                         while (filament_size < MAXIMUM_EXTRUDER_NUMBER && filament_size < size) {

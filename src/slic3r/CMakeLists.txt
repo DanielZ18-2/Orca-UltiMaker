@@ -240,6 +240,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/I18N.hpp
     GUI/DragDropPanel.cpp
     GUI/DragDropPanel.hpp
+    GUI/ColorAssignDialog.cpp
+    GUI/ColorAssignDialog.hpp
     GUI/CapsuleButton.cpp
     GUI/CapsuleButton.hpp
     GUI/FilamentMapPanel.cpp

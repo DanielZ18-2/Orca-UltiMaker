@@ -67,6 +67,28 @@ inline bool flavor_has_pressure_advance(GCodeFlavor flavor)
            flavor != gcfMakerBotLava   && flavor != gcfGriffin;
 }
 
+// MakerBot / UltiMaker Fork: does this flavor describe a machine whose number
+// of filaments is fixed by its print heads?
+//
+// MakerBot and UltiMaker machines have no material changer: one filament per
+// head, one head per nozzle_diameter entry. For them nozzle_diameter IS the
+// filament limit.
+//
+// For every other flavor it is not, and assuming otherwise does damage. A
+// Bambu P1S carries a single nozzle_diameter entry and prints sixteen colours
+// through its AMS; taking the nozzle count as the limit there would fold every
+// multi colour model onto one filament. Orca has no key that states a
+// machine's filament capacity -- Sidebar::add_filament() bounds it by
+// MAXIMUM_EXTRUDER_NUMBER alone, and single_extruder_multi_material defaults
+// to true and is set by neither vendor -- so for an unknown machine the honest
+// answer is "no limit known", and nothing is clamped.
+inline bool flavor_has_fixed_filament_slots(GCodeFlavor flavor)
+{
+    return flavor == gcfMakerBotLegacy || flavor == gcfMakerBotBirdwing ||
+           flavor == gcfMakerBotLava   || flavor == gcfGriffin ||
+           flavor == gcfCheetah;
+}
+
 
 enum class FuzzySkinType {
     None,
