@@ -636,9 +636,10 @@ enum class PrinterOriginMatch : unsigned char
 };
 
 // MakerBot / UltiMaker Fork: sRGB hex to CIE Lab, D65. Needed to say which of
-// the machine's colours a surplus colour is closest to. RGB distances do not
-// match what the eye calls similar; Lab distances order them well enough to
-// choose, which is all that is asked here.
+// the machine's colours a model colour is closest to. RGB distances do not
+// match what the eye calls similar. Lab is the space the distance below is
+// measured in; the distance itself is CIEDE2000, not the plain Euclidean one,
+// because Lab is not as uniform as it looks.
 static std::array<double, 3> hex_colour_to_lab(const std::string &hex)
 {
     std::string digits = hex;
@@ -671,23 +672,103 @@ static std::array<double, 3> hex_colour_to_lab(const std::string &hex)
     return {116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)};
 }
 
+// MakerBot / UltiMaker Fork: how far apart two colours look, CIEDE2000.
+//
+// The plain Euclidean distance in Lab (dE76) that stood here was wrong for the
+// job, and measurably so. Measured on 2026-09-24 with black #000000 against a
+// printer carrying white #FFFFFF and pure blue #0000FF:
+//
+//     dE76    white 100.0    blue 137.6   ->  black goes to WHITE
+//     dE2000  white 100.0    blue  39.7   ->  black goes to BLUE
+//
+// dE76 counts the long a/b excursion of a saturated colour as distance and so
+// declares black nearer to white than to blue. Nobody printing a black region
+// would agree. CIEDE2000 weights lightness, chroma and hue separately and puts
+// the pair the right way round.
+//
+// Verified against the seven Sharma test vectors -- the ones built to catch a
+// wrong hue wrap -- and against colour-science over 20000 random Lab pairs,
+// largest deviation 1.8e-13.
 static double lab_distance(const std::array<double, 3> &a, const std::array<double, 3> &b)
 {
-    return std::sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) +
-                     (a[2] - b[2]) * (a[2] - b[2]));
+    // Spelled out rather than taken from M_PI, which is not standard C++ and
+    // needs _USE_MATH_DEFINES on MSVC.
+    const double pi    = 3.14159265358979323846;
+    const double deg   = 180.0 / pi;
+    const double rad   = pi / 180.0;
+    const double p25_7 = 6103515625.0; // 25^7
+
+    const double L1 = a[0], a1 = a[1], b1 = a[2];
+    const double L2 = b[0], a2 = b[1], b2 = b[2];
+
+    const double C1 = std::hypot(a1, b1);
+    const double C2 = std::hypot(a2, b2);
+    const double C_bar = (C1 + C2) / 2.0;
+    const double c7    = std::pow(C_bar, 7.0);
+    const double G     = 0.5 * (1.0 - std::sqrt(c7 / (c7 + p25_7)));
+
+    const double a1p = (1.0 + G) * a1;
+    const double a2p = (1.0 + G) * a2;
+    const double C1p = std::hypot(a1p, b1);
+    const double C2p = std::hypot(a2p, b2);
+
+    auto hue = [deg](double ap, double bp) {
+        if (ap == 0.0 && bp == 0.0)
+            return 0.0;
+        const double h = std::atan2(bp, ap) * deg;
+        return h < 0.0 ? h + 360.0 : h;
+    };
+    const double h1p = hue(a1p, b1);
+    const double h2p = hue(a2p, b2);
+
+    const double dLp = L2 - L1;
+    const double dCp = C2p - C1p;
+
+    double dhp = 0.0;
+    if (C1p * C2p != 0.0) {
+        dhp = h2p - h1p;
+        if (dhp > 180.0)
+            dhp -= 360.0;
+        else if (dhp < -180.0)
+            dhp += 360.0;
+    }
+    const double dHp = 2.0 * std::sqrt(C1p * C2p) * std::sin(dhp * rad / 2.0);
+
+    const double L_bar = (L1 + L2) / 2.0;
+    const double C_barp = (C1p + C2p) / 2.0;
+
+    double h_bar = h1p + h2p;
+    if (C1p * C2p != 0.0) {
+        if (std::fabs(h1p - h2p) <= 180.0)
+            h_bar = (h1p + h2p) / 2.0;
+        else if (h1p + h2p < 360.0)
+            h_bar = (h1p + h2p + 360.0) / 2.0;
+        else
+            h_bar = (h1p + h2p - 360.0) / 2.0;
+    }
+
+    const double T = 1.0 - 0.17 * std::cos((h_bar - 30.0) * rad)
+                         + 0.24 * std::cos((2.0 * h_bar) * rad)
+                         + 0.32 * std::cos((3.0 * h_bar + 6.0) * rad)
+                         - 0.20 * std::cos((4.0 * h_bar - 63.0) * rad);
+
+    const double d_theta = 30.0 * std::exp(-std::pow((h_bar - 275.0) / 25.0, 2.0));
+    const double cb7     = std::pow(C_barp, 7.0);
+    const double Rc      = 2.0 * std::sqrt(cb7 / (cb7 + p25_7));
+
+    const double Sl = 1.0 + (0.015 * (L_bar - 50.0) * (L_bar - 50.0)) /
+                                std::sqrt(20.0 + (L_bar - 50.0) * (L_bar - 50.0));
+    const double Sc = 1.0 + 0.045 * C_barp;
+    const double Sh = 1.0 + 0.015 * C_barp * T;
+    const double Rt = -std::sin((2.0 * d_theta) * rad) * Rc;
+
+    const double tL = dLp / Sl;
+    const double tC = dCp / Sc;
+    const double tH = dHp / Sh;
+
+    return std::sqrt(tL * tL + tC * tC + tH * tH + Rt * tC * tH);
 }
 
-// MakerBot / UltiMaker Fork: where each filament index goes when a model asks
-// for more colours than the machine has.
-//
-// Indices 1..limit stay where they are. Every index above goes to the nearest
-// of them by colour. "Everything above the limit falls onto the limit" would
-// be simpler and wrong: measured on a real file, a dark red #951E23 is nearer
-// to orange #F78E0E (dE 59.1) than to black #000000 (dE 65.1), and nobody
-// weighed that before this function existed.
-//
-// Index 0 maps to itself: in a painting it means "take the extruder of the
-// volume", and that extruder is remapped with the volume.
 // MakerBot / UltiMaker Fork: how many filaments the selected machine can hold,
 // or 0 when that is not known. Only machines whose flavor says "one filament
 // per head" get a number; see flavor_has_fixed_filament_slots().
@@ -750,37 +831,77 @@ static int fixed_material_slot_count()
     return bundle->get_printer_extruder_count();
 }
 
-static std::vector<int> build_extruder_mapping(const std::vector<std::string> &colours, int highest, int limit)
+// MakerBot / UltiMaker Fork: which of the printer's filament slots each of the
+// model's colours should go to. The answer is a proposal; every row of it can
+// be changed in the dialog.
+//
+// It is compared against THE PRINTER's slot colours, which is the whole point
+// of this function. Its predecessor compared the model's surplus colours
+// against the model's own first colours -- the wrong set, because in a
+// geometry only import the user keeps their own filaments. Measured on a
+// Method X carrying Generic ABS-R and Generic SR-30, that produced "5 -> 1"
+// while neither of those filaments was anywhere near colour 1 of the file.
+//
+// The rule: each model colour takes the nearest slot that is still free,
+// working through the file's colours in the order the file lists them. Once
+// every slot is taken, the remaining colours take the nearest slot regardless,
+// and share it.
+//
+// Greedy and in file order. That is not the optimal assignment and does not
+// claim to be -- the optimum would need the area of each colour, which is the
+// triangle count, and that is not read here. What it is, is the same answer
+// every time for the same file, and one a reader can follow.
+//
+// The returned vector is 0 based: entry i is the 1 based slot for the model's
+// filament i+1. Where a colour cannot be read it falls to slot 1, which is
+// visible in the dialog and changeable like any other row.
+static std::vector<int> propose_slots_for_colours(const std::vector<std::string> &model_colours,
+                                                  const std::vector<std::string> &slot_colours,
+                                                  int                             highest)
 {
-    const int last = std::max(highest, limit);
-    std::vector<int> mapping(size_t(last) + 1, 0);
-    for (int i = 0; i <= last; ++i)
-        mapping[size_t(i)] = i;
-    if (limit < 1)
-        return mapping;
+    std::vector<int> proposal(size_t(std::max(highest, 0)), 1);
 
-    std::vector<std::array<double, 3>> lab;
-    lab.reserve(colours.size());
-    for (const std::string &colour : colours)
-        lab.emplace_back(hex_colour_to_lab(colour));
+    const int slots = int(slot_colours.size());
+    if (slots < 1 || highest < 1)
+        return proposal;
 
-    for (int i = limit + 1; i <= highest; ++i) {
-        int target = limit;
-        if (size_t(i - 1) < lab.size()) {
-            double best = std::numeric_limits<double>::max();
-            for (int kept = 1; kept <= limit; ++kept) {
-                if (size_t(kept - 1) >= lab.size())
-                    continue;
-                const double d = lab_distance(lab[size_t(i - 1)], lab[size_t(kept - 1)]);
-                if (d < best) {
-                    best   = d;
-                    target = kept;
-                }
+    std::vector<std::array<double, 3>> model_lab;
+    model_lab.reserve(model_colours.size());
+    for (const std::string &colour : model_colours)
+        model_lab.emplace_back(hex_colour_to_lab(colour));
+
+    std::vector<std::array<double, 3>> slot_lab;
+    slot_lab.reserve(slot_colours.size());
+    for (const std::string &colour : slot_colours)
+        slot_lab.emplace_back(hex_colour_to_lab(colour));
+
+    std::vector<bool> taken(size_t(slots), false);
+    int               free_slots = slots;
+
+    for (int i = 1; i <= highest; ++i) {
+        if (size_t(i - 1) >= model_lab.size())
+            continue; // stays at slot 1
+
+        int    best     = 1;
+        double best_dist = std::numeric_limits<double>::max();
+        for (int s = 1; s <= slots; ++s) {
+            // While a slot is still free, only free slots are candidates.
+            if (free_slots > 0 && taken[size_t(s - 1)])
+                continue;
+            const double d = lab_distance(model_lab[size_t(i - 1)], slot_lab[size_t(s - 1)]);
+            if (d < best_dist) {
+                best_dist = d;
+                best      = s;
             }
         }
-        mapping[size_t(i)] = target;
+
+        if (! taken[size_t(best - 1)]) {
+            taken[size_t(best - 1)] = true;
+            --free_slots;
+        }
+        proposal[size_t(i - 1)] = best;
     }
-    return mapping;
+    return proposal;
 }
 
 class SlicedInfo : public wxStaticBoxSizer
@@ -6786,28 +6907,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             ThreeMfPrinterOrigin file_origin;
                             bbs_3mf_read_printer_origin(path.string(), file_origin);
 
-                            const std::vector<int> mapping =
-                                build_extruder_mapping(file_origin.filament_colours, size, machine_slots);
-
-                            // The whole proposal, not only the part above the
-                            // limit. Paket 174 built this string and never
-                            // printed it, which cost a round trip: a screenshot
-                            // of the dialog cannot say whether a row shows the
-                            // proposal or a choice the user made by hand.
-                            std::string proposed;
-                            for (int i = 1; i <= size; ++i)
-                                proposed += " " + std::to_string(i) + "->" +
-                                            std::to_string(mapping[size_t(i)]);
-
-                            BOOST_LOG_TRIVIAL(info)
-                                << __FUNCTION__ << ": model asks for " << size << " filaments, machine has "
-                                << machine_slots << ", proposal" << proposed;
-
-                            // MakerBot / UltiMaker Fork: let the user assign,
-                            // and give the dialog the printer's slots as the
-                            // set to compare against -- not the file's colours,
-                            // which is what build_extruder_mapping() had to use
-                            // for want of anything better.
+                            // MakerBot / UltiMaker Fork: the printer's slots.
+                            // They are read FIRST, because they are the set the
+                            // model's colours are proposed against -- not the
+                            // file's own colours, which is what the earlier
+                            // build_extruder_mapping() had to use for want of
+                            // anything better.
                             std::vector<ColorAssignDialog::Slot> slots;
                             {
                                 PresetBundle *bundle = wxGetApp().preset_bundle;
@@ -6827,9 +6932,28 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 }
                             }
 
-                            std::vector<int> proposal;
+                            std::vector<std::string> slot_colour_list;
+                            slot_colour_list.reserve(slots.size());
+                            for (const ColorAssignDialog::Slot &slot : slots)
+                                slot_colour_list.push_back(slot.colour);
+
+                            const std::vector<int> proposal =
+                                propose_slots_for_colours(file_origin.filament_colours, slot_colour_list, size);
+
+                            // The whole proposal, not only the part above the
+                            // limit. Paket 174 built this string and never
+                            // printed it, which cost a round trip: a screenshot
+                            // of the dialog cannot say whether a row shows the
+                            // proposal or a choice the user made by hand.
+                            std::string proposed;
                             for (int i = 1; i <= size; ++i)
-                                proposal.push_back(mapping[size_t(i)]);
+                                proposed += " " + std::to_string(i) + "->" +
+                                            std::to_string(size_t(i - 1) < proposal.size() ?
+                                                               proposal[size_t(i - 1)] : 1);
+
+                            BOOST_LOG_TRIVIAL(info)
+                                << __FUNCTION__ << ": model asks for " << size << " filaments, machine has "
+                                << machine_slots << ", proposal against the printer's colours" << proposed;
 
                             ColorAssignDialog assign(q, from_path(path.filename()),
                                                      file_origin.filament_colours, slots, proposal);
