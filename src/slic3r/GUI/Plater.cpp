@@ -842,22 +842,33 @@ static int fixed_material_slot_count()
 // Method X carrying Generic ABS-R and Generic SR-30, that produced "5 -> 1"
 // while neither of those filaments was anywhere near colour 1 of the file.
 //
-// The rule: each model colour takes the nearest slot that is still free,
-// working through the file's colours in the order the file lists them. Once
-// every slot is taken, the remaining colours take the nearest slot regardless,
-// and share it.
+// The rule has two passes. First, every model colour goes to the slot it looks
+// most like, regardless of order and of who else is already there. The greedy
+// rule this replaced worked in file order and gave each colour the nearest
+// slot still free, so an early colour could take the slot a later one needed:
+// on a printer carrying white, black and orange, the light pink of
+// Pumpkin+Hugger+Gnome took the white slot and the white region went to
+// orange.
 //
-// Greedy and in file order. That is not the optimal assignment and does not
-// claim to be -- the optimum would need the area of each colour, which is the
-// triangle count, and that is not read here. What it is, is the same answer
-// every time for the same file, and one a reader can follow.
+// Second, while a slot stands idle and another carries two or more colours,
+// one colour moves into the idle slot: the move that loses the least surface
+// times colour distance. The surface is area[f], the triangle count of model
+// filament f from ModelObject::painted_area_by_filament(); where it is
+// missing, every colour weighs 1. A colour that is alone on its slot never
+// moves, so no slot is emptied by filling another, and the pass ends after at
+// most one round per slot.
+//
+// That is not the optimal assignment and does not claim to be. It is the same
+// answer every time for the same file and printer, and one a reader can
+// follow.
 //
 // The returned vector is 0 based: entry i is the 1 based slot for the model's
 // filament i+1. Where a colour cannot be read it falls to slot 1, which is
 // visible in the dialog and changeable like any other row.
 static std::vector<int> propose_slots_for_colours(const std::vector<std::string> &model_colours,
                                                   const std::vector<std::string> &slot_colours,
-                                                  int                             highest)
+                                                  int                             highest,
+                                                  const std::vector<double>      &area)
 {
     std::vector<int> proposal(size_t(std::max(highest, 0)), 1);
 
@@ -875,32 +886,77 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
     for (const std::string &colour : slot_colours)
         slot_lab.emplace_back(hex_colour_to_lab(colour));
 
-    std::vector<bool> taken(size_t(slots), false);
-    int               free_slots = slots;
+    const int count = std::min(highest, int(model_lab.size()));
 
-    for (int i = 1; i <= highest; ++i) {
-        if (size_t(i - 1) >= model_lab.size())
-            continue; // stays at slot 1
+    // Every distance once. At most 64 colours against at most 16 slots.
+    std::vector<double> dist(size_t(count) * size_t(slots), 0.0);
+    auto at = [slots](int i, int s) { return size_t(i) * size_t(slots) + size_t(s); };
+    for (int i = 0; i < count; ++i)
+        for (int s = 0; s < slots; ++s)
+            dist[at(i, s)] = lab_distance(model_lab[size_t(i)], slot_lab[size_t(s)]);
 
-        int    best     = 1;
-        double best_dist = std::numeric_limits<double>::max();
-        for (int s = 1; s <= slots; ++s) {
-            // While a slot is still free, only free slots are candidates.
-            if (free_slots > 0 && taken[size_t(s - 1)])
-                continue;
-            const double d = lab_distance(model_lab[size_t(i - 1)], slot_lab[size_t(s - 1)]);
-            if (d < best_dist) {
-                best_dist = d;
-                best      = s;
+    auto weight = [&area](int i) {
+        const size_t k = size_t(i) + 1;
+        return (k < area.size() && area[k] > 0.0) ? area[k] : 1.0;
+    };
+
+    // First pass: every colour to the slot it looks most like. No order, no
+    // occupancy -- an orange region goes on the orange filament even when a
+    // bigger region has already claimed it.
+    std::vector<int> pick(size_t(count), 0);
+    for (int i = 0; i < count; ++i) {
+        int best = 0;
+        for (int s = 1; s < slots; ++s)
+            if (dist[at(i, s)] < dist[at(i, best)])
+                best = s;
+        pick[size_t(i)] = best;
+    }
+
+    // Second pass: a slot standing idle while another carries two colours
+    // throws away a distinction for nothing. So colours move out of crowded
+    // slots into idle ones until no idle slot is left or nothing can move.
+    //
+    // Which colour moves is where the surface figures earn their keep: the
+    // move that costs least is the one with the smallest area times distance
+    // lost, and the move that gains is taken first. A region of 2 percent
+    // moves before a region of 68 percent.
+    //
+    // The move happens even when it costs something. Two regions kept apart
+    // is the thing the user is being asked about; a slightly better colour
+    // match is not worth merging them for.
+    for (int round = 0; round < slots; ++round) {
+        std::vector<int> load(size_t(slots), 0);
+        for (int i = 0; i < count; ++i)
+            ++load[size_t(pick[size_t(i)])];
+
+        int idle = -1;
+        for (int s = 0; s < slots; ++s)
+            if (load[size_t(s)] == 0) {
+                idle = s;
+                break;
+            }
+        if (idle < 0)
+            break;
+
+        int    mover = -1;
+        double best  = 0.0;
+        for (int i = 0; i < count; ++i) {
+            const int from = pick[size_t(i)];
+            if (load[size_t(from)] < 2)
+                continue; // the only colour on its slot must stay
+            const double gain = weight(i) * (dist[at(i, from)] - dist[at(i, idle)]);
+            if (mover < 0 || gain > best) {
+                mover = i;
+                best  = gain;
             }
         }
-
-        if (! taken[size_t(best - 1)]) {
-            taken[size_t(best - 1)] = true;
-            --free_slots;
-        }
-        proposal[size_t(i - 1)] = best;
+        if (mover < 0)
+            break;
+        pick[size_t(mover)] = idle;
     }
+
+    for (int i = 0; i < count; ++i)
+        proposal[size_t(i)] = pick[size_t(i)] + 1;
     return proposal;
 }
 
@@ -6899,9 +6955,14 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         // So the model is renumbered down to what the machine
                         // can do BEFORE the list is grown. Nothing is deleted:
                         // every painted region keeps its faces, they only share
-                        // a slot. Paket 172 puts this mapping in front of the
-                        // user, changeable row by row; until then it happens
-                        // automatically and says so.
+                        // a slot. The mapping is put in front of the user first,
+                        // changeable row by row; if they cancel, the model is
+                        // left as it is.
+                        //
+                        // This covers only machines printer_filament_limit()
+                        // knows, which today are our own flavors. The
+                        // WonderMaker above is not one of them and still gets
+                        // the fifth slot.
                         const int machine_slots = printer_filament_limit();
                         if (load_model && ! load_config && machine_slots > 0 && size > machine_slots) {
                             ThreeMfPrinterOrigin file_origin;
@@ -6932,32 +6993,10 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 }
                             }
 
-                            std::vector<std::string> slot_colour_list;
-                            slot_colour_list.reserve(slots.size());
-                            for (const ColorAssignDialog::Slot &slot : slots)
-                                slot_colour_list.push_back(slot.colour);
-
-                            const std::vector<int> proposal =
-                                propose_slots_for_colours(file_origin.filament_colours, slot_colour_list, size);
-
-                            // The whole proposal, not only the part above the
-                            // limit. Paket 174 built this string and never
-                            // printed it, which cost a round trip: a screenshot
-                            // of the dialog cannot say whether a row shows the
-                            // proposal or a choice the user made by hand.
-                            std::string proposed;
-                            for (int i = 1; i <= size; ++i)
-                                proposed += " " + std::to_string(i) + "->" +
-                                            std::to_string(size_t(i - 1) < proposal.size() ?
-                                                               proposal[size_t(i - 1)] : 1);
-
-                            BOOST_LOG_TRIVIAL(info)
-                                << __FUNCTION__ << ": model asks for " << size << " filaments, machine has "
-                                << machine_slots << ", proposal against the printer's colours" << proposed;
-
                             // MakerBot / UltiMaker Fork: how much surface each
                             // of the model's filaments covers, so the dialog
-                            // can say whether two rows sharing a slot matters.
+                            // can say whether two rows sharing a slot matters --
+                            // and so the proposal can weigh a move by it.
                             // Counted in mesh triangles, not in painting
                             // leaves -- a finely painted region has many
                             // leaves and no more surface.
@@ -6973,6 +7012,29 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                     colour_area.clear();
                                 }
                             }
+
+                            std::vector<std::string> slot_colour_list;
+                            slot_colour_list.reserve(slots.size());
+                            for (const ColorAssignDialog::Slot &slot : slots)
+                                slot_colour_list.push_back(slot.colour);
+
+                            const std::vector<int> proposal =
+                                propose_slots_for_colours(file_origin.filament_colours, slot_colour_list, size,
+                                                          colour_area);
+
+                            // The whole proposal, not only the part above the
+                            // limit, goes to the log: a screenshot of the dialog
+                            // cannot say whether a row shows the proposal or a
+                            // choice the user made by hand.
+                            std::string proposed;
+                            for (int i = 1; i <= size; ++i)
+                                proposed += " " + std::to_string(i) + "->" +
+                                            std::to_string(size_t(i - 1) < proposal.size() ?
+                                                               proposal[size_t(i - 1)] : 1);
+
+                            BOOST_LOG_TRIVIAL(info)
+                                << __FUNCTION__ << ": model asks for " << size << " filaments, machine has "
+                                << machine_slots << ", proposal against the printer's colours" << proposed;
 
                             ColorAssignDialog assign(q, from_path(path.filename()),
                                                      file_origin.filament_colours, slots, proposal,
