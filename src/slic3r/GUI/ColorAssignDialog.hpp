@@ -4,11 +4,14 @@
 #include "GUI_Utils.hpp"
 
 #include <wx/colourdata.h>
+#include <wx/statbmp.h>
 
 #include <string>
 #include <vector>
 
 class ComboBox;
+
+namespace Slic3r { class ModelObject; }
 
 namespace Slic3r { namespace GUI {
 
@@ -65,11 +68,16 @@ public:
     // proposal       proposal[i] = 1 based slot for model colour i+1;
     //                may be shorter than model_colours, the rest defaults to
     //                its own index clamped into the slot range
-    ColorAssignDialog(wxWindow                       *parent,
-                      const wxString                 &filename,
-                      const std::vector<std::string> &model_colours,
-                      const std::vector<Slot>        &slots,
-                      const std::vector<int>         &proposal);
+    // objects        the model that is about to be imported, for the preview.
+    //                It is READ, never changed: the preview is rendered from a
+    //                colour list handed to the renderer, so nothing is merged
+    //                before the user closes the dialog with OK.
+    ColorAssignDialog(wxWindow                                *parent,
+                      const wxString                          &filename,
+                      const std::vector<std::string>          &model_colours,
+                      const std::vector<Slot>                 &slots,
+                      const std::vector<int>                  &proposal,
+                      const std::vector<Slic3r::ModelObject *> &objects);
 
     // mapping()[i] is the 1 based slot that filament i goes to, with index 0
     // mapping to itself so it can be handed to ModelObject::remap_extruders()
@@ -104,6 +112,20 @@ private:
     // Opens Orca's filament colour picker for one slot and keeps the answer.
     void pick_slot_colour(size_t index);
 
+    // Draws the model as it would come out with the assignment as it stands.
+    //
+    // Nothing in the model is touched. GLCanvas3D::render_thumbnail() takes the
+    // colour list as an argument, so the picture can show a merge that has not
+    // happened yet -- which is exactly what "merge only when the dialog closes"
+    // needs.
+    void refresh_preview();
+
+    // Puts the colour of the chosen slot into the middle patch of every model
+    // row, so that a row reads "this colour becomes that one". Redrawn by
+    // refresh_preview() together with the picture: the row and the picture
+    // answer the same question and must never disagree.
+    void paint_slot_echo();
+
     // Puts the colours onto the swatches.
     //
     // This runs AFTER GUI_App::UpdateDlgDarkUI(), and it has to: that pass
@@ -116,7 +138,10 @@ private:
 
     std::vector<ComboBox *>  m_targets;        // one per model colour
     std::vector<std::string> m_model_colours;
+    std::vector<Slic3r::ModelObject *> m_objects; // read only, for the preview
+    wxStaticBitmap          *m_preview{nullptr};
     std::vector<wxWindow *>  m_model_patches;  // one per model colour
+    std::vector<wxWindow *>  m_slot_echo;      // one per model colour
     std::vector<wxWindow *>  m_slot_patches;   // one per printer slot
     std::vector<std::string> m_slot_colours;   // as edited in this dialog
     std::vector<bool>        m_slot_edited;    // true where the user picked

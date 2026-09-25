@@ -6956,7 +6956,8 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 << machine_slots << ", proposal against the printer's colours" << proposed;
 
                             ColorAssignDialog assign(q, from_path(path.filename()),
-                                                     file_origin.filament_colours, slots, proposal);
+                                                     file_origin.filament_colours, slots, proposal,
+                                                     model.objects);
                             if (assign.ShowModal() == wxID_OK) {
                                 const std::vector<int> chosen = assign.mapping();
 

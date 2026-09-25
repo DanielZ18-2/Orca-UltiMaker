@@ -1,16 +1,26 @@
 #include "ColorAssignDialog.hpp"
 
+#include "3DScene.hpp"
+#include "Camera.hpp"
+#include "GLCanvas3D.hpp"
 #include "GUI.hpp"
 #include "GUI_App.hpp"
 #include "I18N.hpp"
+#include "PartPlate.hpp"
+#include "Plater.hpp"
 #include "wxExtensions.hpp"
+#include "libslic3r/Model.hpp"
+#include "libslic3r/GCode/ThumbnailData.hpp"
 #include "Widgets/Button.hpp"
 #include "Widgets/CheckBox.hpp"
 #include "Widgets/ComboBox.hpp"
 #include "Widgets/DialogButtons.hpp"
 #include "Widgets/Label.hpp"
 
+#include <boost/log/trivial.hpp>
+
 #include <wx/cursor.h>
+#include <wx/image.h>
 #include <wx/sizer.h>
 #include <wx/statbox.h>
 #include <wx/stattext.h>
@@ -41,14 +51,16 @@ static wxPanel *colour_patch(wxWindow *parent, const wxSize &size)
     return patch;
 }
 
-ColorAssignDialog::ColorAssignDialog(wxWindow                       *parent,
-                                     const wxString                 &filename,
-                                     const std::vector<std::string> &model_colours,
-                                     const std::vector<Slot>        &slots,
-                                     const std::vector<int>         &proposal)
+ColorAssignDialog::ColorAssignDialog(wxWindow                                *parent,
+                                     const wxString                          &filename,
+                                     const std::vector<std::string>          &model_colours,
+                                     const std::vector<Slot>                 &slots,
+                                     const std::vector<int>                  &proposal,
+                                     const std::vector<Slic3r::ModelObject *> &objects)
     : DPIDialog(parent, wxID_ANY, _L("Assign the model's colours"), wxDefaultPosition, wxDefaultSize,
                 wxCAPTION | wxCLOSE_BOX)
     , m_model_colours(model_colours)
+    , m_objects(objects)
     , m_slot_count(slots.size())
 {
     const wxSize patch_size = wxSize(FromDIP(26), FromDIP(16));
@@ -108,9 +120,13 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                       *parent,
     }
     slot_box->Add(slot_grid, 0, wxEXPAND | wxALL, FromDIP(8));
 
+    // The second half now shows two colours per row, so the old one line
+    // ("the colours below come from the file") would be ambiguous: one of the
+    // two does change.
     auto *slot_hint = new wxStaticText(
         slot_box->GetStaticBox(), wxID_ANY,
-        _L("The colours below come from the file and cannot be changed here."));
+        _L("Below, the left colour is the model's and comes from the file. The one beside it is "
+           "the filament it would be printed in."));
     slot_hint->SetMaxSize(wxSize(FromDIP(440), -1));
     slot_hint->Wrap(FromDIP(440));
     slot_box->Add(slot_hint, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
@@ -120,8 +136,12 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                       *parent,
 
     // --- the model's colours, each with the slot it goes to
     auto *model_box  = new wxStaticBoxSizer(wxVERTICAL, this, _L("Colours of the model"));
-    auto *model_grid = new wxFlexGridSizer(0, 3, FromDIP(4), FromDIP(10));
-    model_grid->AddGrowableCol(2, 1);
+    // Four columns: the model's colour, its number, the colour of the slot it
+    // points at, and the slot itself. The third one is the answer to the
+    // question the second half asks -- "which filament colour does this region
+    // become" -- written next to the question instead of only in the picture.
+    auto *model_grid = new wxFlexGridSizer(0, 4, FromDIP(4), FromDIP(10));
+    model_grid->AddGrowableCol(3, 1);
 
     wxArrayString slot_labels;
     for (size_t s = 0; s < slots.size(); ++s) {
@@ -140,6 +160,14 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                       *parent,
                                          wxString::Format("%d", int(i + 1))),
                         0, wxALIGN_CENTER_VERTICAL);
 
+        // What this region turns into. Filled in by paint_slot_echo(), which
+        // runs on every change, so the two colours in a row always stand for
+        // "from" and "to".
+        auto *echo = colour_patch(model_box->GetStaticBox(), patch_size);
+        echo->SetToolTip(_L("The filament colour this region will be printed in"));
+        m_slot_echo.push_back(echo);
+        model_grid->Add(echo, 0, wxALIGN_CENTER_VERTICAL);
+
         auto *target = new ComboBox(model_box->GetStaticBox(), wxID_ANY, wxEmptyString,
                                     wxDefaultPosition, wxSize(FromDIP(240), -1), 0, nullptr,
                                     wxCB_READONLY);
@@ -155,11 +183,33 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                       *parent,
         chosen = std::max(chosen, 1);
         target->SetSelection(chosen - 1);
 
+        // Every change redraws the picture. SetSelection() above does not send
+        // this event -- only a choice made by hand does -- so filling the boxes
+        // cannot set off a round of renders.
+        target->Bind(wxEVT_COMBOBOX, [this](wxCommandEvent &e) {
+            refresh_preview();
+            e.Skip();
+        });
+
         model_grid->Add(target, 0, wxALIGN_CENTER_VERTICAL);
         m_targets.push_back(target);
     }
     model_box->Add(model_grid, 0, wxEXPAND | wxALL, FromDIP(8));
-    main->Add(model_box, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
+
+    // --- the picture, beside the colours rather than below them: the dialog
+    // --- gets wider instead of taller, and the two things that have to be
+    // --- compared stand next to each other
+    auto *preview_box = new wxStaticBoxSizer(wxVERTICAL, this, _L("How it would come out"));
+    m_preview = new wxStaticBitmap(preview_box->GetStaticBox(), wxID_ANY, wxNullBitmap,
+                                   wxDefaultPosition, wxSize(FromDIP(340), FromDIP(340)));
+    m_preview->SetMinSize(wxSize(FromDIP(340), FromDIP(340)));
+    preview_box->Add(m_preview, 0, wxALL, FromDIP(8));
+
+    auto *middle = new wxBoxSizer(wxHORIZONTAL);
+    middle->Add(model_box, 1, wxEXPAND);
+    middle->AddSpacer(FromDIP(10));
+    middle->Add(preview_box, 0, wxALIGN_TOP);
+    main->Add(middle, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
     main->AddSpacer(FromDIP(10));
 
     auto *adopt = new ::CheckBox(this);
@@ -180,6 +230,7 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                       *parent,
 
     adopt->Bind(wxEVT_TOGGLEBUTTON, [this, adopt](wxCommandEvent &e) {
         m_adopt_colours = adopt->GetValue();
+        refresh_preview();
         e.Skip();
     });
 
@@ -199,6 +250,102 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                       *parent,
     // Last, so that the dark mode pass cannot recolour a filament. See the
     // note on paint_swatches() in the header.
     paint_swatches();
+    refresh_preview();
+}
+
+void ColorAssignDialog::paint_slot_echo()
+{
+    const std::vector<int>         map  = mapping();
+    const std::vector<std::string> cols = final_slot_colours();
+
+    for (size_t i = 0; i < m_slot_echo.size(); ++i) {
+        std::string hex;
+        if (i + 1 < map.size() && map[i + 1] >= 1) {
+            const size_t slot = size_t(map[i + 1] - 1);
+            if (slot < cols.size())
+                hex = cols[slot];
+        }
+        m_slot_echo[i]->SetBackgroundColour(colour_from_hex(hex));
+        m_slot_echo[i]->Refresh();
+    }
+}
+
+void ColorAssignDialog::refresh_preview()
+{
+    // The row and the picture answer the same question and must never
+    // disagree, so they are redrawn together, never separately.
+    paint_slot_echo();
+
+    if (m_preview == nullptr || m_objects.empty())
+        return;
+
+    Plater *plater = wxGetApp().plater();
+    if (plater == nullptr)
+        return;
+    GLCanvas3D *canvas = plater->get_view3D_canvas3D();
+    if (canvas == nullptr)
+        return;
+
+    // The colour each of the model's filaments would be printed in: not its own
+    // colour, but the colour of the slot it points at. Two colours on one slot
+    // therefore look the same here -- which is the whole question the user is
+    // being asked, shown instead of described.
+    const std::vector<int>         map  = mapping();
+    const std::vector<std::string> cols = final_slot_colours(); // honours the tick box
+    std::vector<ColorRGBA>         colours;
+    colours.reserve(m_model_colours.size());
+    for (size_t i = 0; i < m_model_colours.size(); ++i) {
+        std::string hex = m_model_colours[i];
+        if (i + 1 < map.size() && map[i + 1] >= 1) {
+            const size_t slot = size_t(map[i + 1] - 1);
+            if (slot < cols.size() && ! cols[slot].empty())
+                hex = cols[slot];
+        }
+        const wxColour c = colour_from_hex(hex);
+        colours.push_back(ColorRGBA(c.Red() / 255.0f, c.Green() / 255.0f, c.Blue() / 255.0f, 1.0f));
+    }
+    if (colours.empty())
+        return;
+
+    // Every volume of every object, not just the first one of the first object:
+    // Plater::update_obj_preview_thumbnail() renders a single volume, which is
+    // enough for the OBJ colour dialog and not enough for a plate that carries
+    // seven objects.
+    ModelObjectPtrs    objects = m_objects;
+    GLVolumeCollection volumes;
+    for (size_t o = 0; o < objects.size(); ++o) {
+        if (objects[o] == nullptr)
+            continue;
+        for (size_t v = 0; v < objects[o]->volumes.size(); ++v)
+            volumes.load_object_volume(objects[o], int(o), int(v), 0, "volume", true, false, false, false);
+    }
+    if (volumes.volumes.empty())
+        return;
+
+    ThumbnailData    data;
+    ThumbnailsParams params = {{}, false, true, false, true, 0, false};
+    canvas->render_thumbnail(data, colours, PartPlate::plate_thumbnail_width,
+                             PartPlate::plate_thumbnail_height, params, objects, volumes,
+                             Camera::EType::Ortho, Camera::ViewAngleType::Iso, false, false);
+    if (! data.is_valid()) {
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": no preview -- the renderer returned nothing";
+        return;
+    }
+
+    wxImage image(data.width, data.height);
+    image.InitAlpha();
+    for (unsigned int r = 0; r < data.height; ++r) {
+        const unsigned int rr = (data.height - 1 - r) * data.width;
+        for (unsigned int c = 0; c < data.width; ++c) {
+            const unsigned char *px = (const unsigned char *) data.pixels.data() + 4 * (rr + c);
+            image.SetRGB(int(c), int(r), px[0], px[1], px[2]);
+            image.SetAlpha(int(c), int(r), px[3]);
+        }
+    }
+    const int side = FromDIP(340);
+    image = image.Rescale(side, side, wxIMAGE_QUALITY_HIGH);
+    m_preview->SetBitmap(wxBitmap(image));
+    m_preview->Refresh();
 }
 
 void ColorAssignDialog::paint_swatches()
@@ -243,6 +390,7 @@ void ColorAssignDialog::pick_slot_colour(size_t index)
         m_slot_patches[index]->SetBackgroundColour(data.GetColour());
         m_slot_patches[index]->Refresh();
     }
+    refresh_preview();
 }
 
 std::vector<int> ColorAssignDialog::mapping() const
