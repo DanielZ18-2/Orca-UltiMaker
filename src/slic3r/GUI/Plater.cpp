@@ -6981,8 +6981,8 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         // can do BEFORE the list is grown. Nothing is deleted:
                         // every painted region keeps its faces, they only share
                         // a slot. The mapping is put in front of the user first,
-                        // changeable row by row; if they cancel, the model is
-                        // left as it is.
+                        // changeable row by row; if they cancel, the file is not
+                        // imported at all.
                         //
                         // Which machines have a known limit is decided in
                         // printer_filament_limit().
@@ -7177,8 +7177,20 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                     << machine_slots << ", chosen" << taken;
                                 size = machine_slots;
                             } else {
+                                // MakerBot / UltiMaker Fork: cancelling the
+                                // assignment cancels the import, as cancelling the
+                                // question before it does. Loading the model as it
+                                // is would grow the filament list past what the
+                                // machine holds -- the very state this dialog is
+                                // there to prevent.
                                 BOOST_LOG_TRIVIAL(info)
-                                    << __FUNCTION__ << ": left alone -- the user cancelled the colour assignment";
+                                    << __FUNCTION__ << ": colour assignment cancelled -- the file is not imported";
+                                release_PlateData_list(plate_data);
+                                for (Preset *embedded : project_presets)
+                                    delete embedded;
+                                project_presets.clear();
+                                q->skip_thumbnail_invalid = false;
+                                return empty_result;
                             }
                         }
 
