@@ -769,21 +769,46 @@ static double lab_distance(const std::array<double, 3> &a, const std::array<doub
     return std::sqrt(tL * tL + tC * tC + tH * tH + Rt * tC * tH);
 }
 
-// MakerBot / UltiMaker Fork: how many filaments the selected machine can hold,
-// or 0 when that is not known. Only machines whose flavor says "one filament
-// per head" get a number; see flavor_has_fixed_filament_slots().
+// MakerBot / UltiMaker Fork: how many filaments the selected machine can hold
+// at once, or 0 when that is not known. The geometry import renumbers a model
+// down to this number, so a number is only given where it is certain:
+//
+//  - our own machines, by flavor: one filament per head, no material changer.
+//    See flavor_has_fixed_filament_slots().
+//
+//  - everyone else's machines with single_extruder_multi_material off and at
+//    least two heads: toolchangers and IDEX, one filament per head.
+//
+// Left out on purpose:
+//
+//  - one head with single_extruder_multi_material off, the Prusa CORE One and
+//    the Flashforge Adventurer 5M among them. A second filament there may well
+//    be a manual swap, and nothing says how many the owner means to make.
+//
+//  - one head with single_extruder_multi_material on. That is Orca's default,
+//    and a machine with a material changer carries it exactly like one
+//    without: the profile cannot tell them apart, let alone count the
+//    changer's slots.
+//
+//  - Bambu Lab: the AMS is read from the printer.
 static int printer_filament_limit()
 {
     PresetBundle *bundle = wxGetApp().preset_bundle;
-    if (bundle == nullptr)
+    if (bundle == nullptr || bundle->is_bbl_vendor())
         return 0;
 
-    const Preset                        &printer = bundle->printers.get_edited_preset();
-    const ConfigOptionEnum<GCodeFlavor> *flavor  = printer.config.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor");
-    if (flavor == nullptr || ! flavor_has_fixed_filament_slots(flavor->value))
-        return 0;
+    const Preset &printer = bundle->printers.get_edited_preset();
+    const int     heads   = bundle->get_printer_extruder_count();
 
-    return bundle->get_printer_extruder_count();
+    const ConfigOptionEnum<GCodeFlavor> *flavor = printer.config.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor");
+    if (flavor != nullptr && flavor_has_fixed_filament_slots(flavor->value))
+        return heads;
+
+    const ConfigOptionBool *semm = printer.config.option<ConfigOptionBool>("single_extruder_multi_material");
+    if (semm != nullptr && ! semm->value && heads >= 2)
+        return heads;
+
+    return 0;
 }
 
 // MakerBot / UltiMaker Fork: how many filaments a machine with FIXED material
@@ -809,8 +834,8 @@ static int printer_filament_limit()
 // This is deliberately WIDER than printer_filament_limit(). It governs the
 // two list buttons and the guard in add_custom_filament(), where the worst
 // case is a button that does not appear. printer_filament_limit() governs the
-// import, which RENUMBERS A MODEL, and stays on our own flavors until the
-// wider rule has been measured on a machine that is not ours.
+// import, which RENUMBERS A MODEL, and of everyone else's machines takes only
+// those with two or more heads.
 static int fixed_material_slot_count()
 {
     PresetBundle *bundle = wxGetApp().preset_bundle;
@@ -6959,12 +6984,47 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         // changeable row by row; if they cancel, the model is
                         // left as it is.
                         //
-                        // This covers only machines printer_filament_limit()
-                        // knows, which today are our own flavors. The
-                        // WonderMaker above is not one of them and still gets
-                        // the fifth slot.
+                        // Which machines have a known limit is decided in
+                        // printer_filament_limit().
                         const int machine_slots = printer_filament_limit();
-                        if (load_model && ! load_config && machine_slots > 0 && size > machine_slots) {
+
+                        // MakerBot / UltiMaker Fork: a machine that holds one
+                        // filament leaves nothing to choose -- every row of the
+                        // dialog could only say "slot 1". So there is no
+                        // dialog: the model goes straight onto filament 1 and a
+                        // notification says so. The file itself is not touched.
+                        if (load_model && ! load_config && machine_slots == 1 && size > 1) {
+                            std::vector<int> onto_one(size_t(size) + 1, 1);
+                            onto_one[0] = 0; // "the volume's own extruder" stays itself
+
+                            bool remapped = false;
+                            for (ModelObject *object : model.objects)
+                                remapped |= object->remap_extruders(onto_one);
+
+                            const int had = int(sidebar->combos_filament().size());
+                            if (had > 1)
+                                wxGetApp().preset_bundle->set_num_filaments(1u, std::string());
+                            wxGetApp().plater()->on_filament_count_change(1);
+
+                            const int colours = int(std::count_if(extruderIds.begin(), extruderIds.end(),
+                                                                  [](int id) { return id >= 1; }));
+
+                            BOOST_LOG_TRIVIAL(info)
+                                << __FUNCTION__ << ": model asks for " << size << " filaments (" << colours
+                                << " in use), machine holds one, all put on filament 1 without asking, remapped="
+                                << remapped << ", filament list " << had << " -> 1";
+
+                            const wxString note = wxString::Format(
+                                _L("%s is set up for %d filaments, and this printer holds one. Everything is "
+                                   "printed with filament 1; the file itself is not changed."),
+                                from_path(path.filename()), size);
+                            notification_manager->push_notification(NotificationType::CustomNotification,
+                                                                    NotificationManager::NotificationLevel::RegularNotificationLevel,
+                                                                    std::string(note.ToUTF8().data()));
+                            size = 1;
+                        }
+
+                        if (load_model && ! load_config && machine_slots > 1 && size > machine_slots) {
                             ThreeMfPrinterOrigin file_origin;
                             bbs_3mf_read_printer_origin(path.string(), file_origin);
 
