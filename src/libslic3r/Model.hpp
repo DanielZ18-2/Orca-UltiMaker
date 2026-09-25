@@ -431,6 +431,10 @@ public:
     // MakerBot / UltiMaker Fork: renumber every extruder this object and its
     // volumes refer to -- own config, volume configs and the painting.
     bool                    remap_extruders(const std::vector<int> &mapping);
+    // MakerBot / UltiMaker Fork: how much surface belongs to which filament,
+    // in units of original mesh triangles, added to area over all model part
+    // volumes. area[1] is filament 1; 17 entries cover Extruder1..Extruder16.
+    bool                    painted_area_by_filament(std::vector<double> &area) const;
     // This object may have a varying layer height by painting or by a table.
     // Even if true is returned, the layer height profile may be "flat" with no difference to default layering.
     bool                    has_custom_layering() const
@@ -771,6 +775,16 @@ public:
     // the result would not carry exactly the same leaves.
     bool remap_extruder_states(const std::vector<int> &mapping);
 
+    // MakerBot / UltiMaker Fork: an estimate of how much surface belongs to
+    // which filament, in units of original mesh triangles, added to area.
+    // Indexed by the state value, so area[1] is filament 1 and area[0] is the
+    // "take the extruder of the volume" share. area must already have room
+    // for the highest state; 17 entries cover Extruder1..Extruder16.
+    //
+    // Not a leaf count: a finely painted triangle has many leaves and no more
+    // surface than a coarse one. See the note at the definition.
+    bool painted_area(std::vector<double> &area) const;
+
 private:
     // Constructors to be only called by derived classes.
     // Default constructor to assign a unique ID.
@@ -1034,6 +1048,10 @@ public:
     // MakerBot / UltiMaker Fork: renumber the extruders this volume refers
     // to -- its own filament and its painting. See ModelObject::remap_extruders.
     bool remap_extruders(const std::vector<int> &mapping);
+    // MakerBot / UltiMaker Fork: how much surface belongs to which filament,
+    // added to area. The state 0 share of the painting and every unpainted
+    // triangle go to this volume's own filament, where they belong.
+    bool painted_area_by_filament(std::vector<double> &area) const;
 
 protected:
 	friend class Print;

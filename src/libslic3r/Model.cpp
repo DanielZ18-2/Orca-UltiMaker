@@ -1406,6 +1406,131 @@ static bool count_painting_states(const std::vector<bool>                       
     return true;
 }
 
+// MakerBot / UltiMaker Fork: how much of each painted triangle belongs to
+// which filament, in units of original mesh triangles.
+//
+// Why not simply count the leaves, which count_painting_states() above
+// already does: a leaf is one node of the subdivision tree, and a triangle
+// painted in fine detail has many more of them than a coarsely painted one of
+// the same size. Measured on Pumpkin+Hugger+Gnome, 91606 triangles:
+//
+//     filament 1    15272 leaves    but only 2860 triangles of area  (3.1%)
+//     filament 3    10776 leaves         10776 triangles of area    (11.8%)
+//
+// By leaves, filament 1 is the largest painted region in the file. By area it
+// is one of the smallest. Leaves measure painting effort, not surface.
+//
+// A split node with the low two bits set to s has s+1 children
+// (TriangleSelector.cpp: num_of_children = number_of_split_sides() + 1), so
+// each child gets its parent's share divided by their number. That is exact
+// for two and four children and an approximation for three, where the corner
+// piece is smaller than the other two. It is an estimate of area and says so.
+bool FacetsAnnotation::painted_area(std::vector<double> &area) const
+{
+    if (m_data.triangles_to_split.empty() || m_data.bitstream.empty())
+        return false;
+    if ((m_data.bitstream.size() % 4) != 0)
+        return false;
+
+    struct Frame
+    {
+        int    left;
+        double share;
+    };
+
+    for (size_t t = 0; t < m_data.triangles_to_split.size(); ++t) {
+        size_t       idx = size_t(m_data.triangles_to_split[t].bitstream_start_idx);
+        const size_t end = (t + 1 < m_data.triangles_to_split.size()) ?
+                               size_t(m_data.triangles_to_split[t + 1].bitstream_start_idx) :
+                               m_data.bitstream.size();
+        if (idx > end || end > m_data.bitstream.size())
+            return false;
+
+        auto read_nibble = [this, &idx]() -> uint8_t {
+            uint8_t code = 0;
+            for (size_t bit = 0; bit < 4; ++bit)
+                code |= uint8_t(m_data.bitstream[idx++]) << bit;
+            return code;
+        };
+
+        // One triangle of the original mesh, area 1, handed down the tree.
+        std::vector<Frame> stack;
+        stack.push_back({1, 1.0});
+        while (! stack.empty()) {
+            if (idx + 4 > end)
+                return false;
+            const double share = stack.back().share;
+            if (--stack.back().left == 0)
+                stack.pop_back();
+
+            const uint8_t code = read_nibble();
+            if ((code & 0b11) != 0) {
+                const int children = int(code & 0b11) + 1;
+                stack.push_back({children, share / double(children)});
+                continue;
+            }
+
+            int state = 0;
+            if ((code & 0b1100) == 0b1100) {
+                if (idx + 4 > end)
+                    return false;
+                state = int(read_nibble()) + 3;
+            } else {
+                state = int(code) >> 2;
+            }
+            if (state < 0 || size_t(state) >= area.size())
+                return false;
+            area[size_t(state)] += share;
+        }
+        if (idx != end)
+            return false;
+    }
+    return true;
+}
+
+// MakerBot / UltiMaker Fork: the same count for one volume, with the state 0
+// share and every unpainted triangle put where they belong -- on the volume's
+// own filament. Those unpainted triangles are the mass of a normal model: on
+// Pumpkin+Hugger+Gnome they are 60419 of 91606, two thirds of the whole.
+bool ModelVolume::painted_area_by_filament(std::vector<double> &area) const
+{
+    if (area.size() < 2)
+        return false;
+
+    int own = this->extruder_id();
+    if (own < 1 || size_t(own) >= area.size())
+        own = 1;
+
+    const size_t facets = this->mesh().its.indices.size();
+
+    if (this->mmu_segmentation_facets.empty()) {
+        area[size_t(own)] += double(facets);
+        return true;
+    }
+
+    std::vector<double> states(area.size(), 0.0);
+    if (! this->mmu_segmentation_facets.painted_area(states))
+        return false;
+
+    const size_t painted = this->mmu_segmentation_facets.get_data().triangles_to_split.size();
+    area[size_t(own)] += double(facets > painted ? facets - painted : 0);
+
+    // State 0 in a painting means "take the filament of the volume".
+    area[size_t(own)] += states[0];
+    for (size_t s = 1; s < states.size(); ++s)
+        area[s] += states[s];
+    return true;
+}
+
+bool ModelObject::painted_area_by_filament(std::vector<double> &area) const
+{
+    bool ok = ! this->volumes.empty();
+    for (const ModelVolume *volume : this->volumes)
+        if (volume != nullptr && volume->is_model_part())
+            ok &= volume->painted_area_by_filament(area);
+    return ok;
+}
+
 // MakerBot / UltiMaker Fork: renumber the extruders a painting refers to.
 //
 // Re-encoding changes the length of a leaf (states 0..2 take one nibble,

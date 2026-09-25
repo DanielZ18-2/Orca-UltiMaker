@@ -72,12 +72,16 @@ public:
     //                It is READ, never changed: the preview is rendered from a
     //                colour list handed to the renderer, so nothing is merged
     //                before the user closes the dialog with OK.
+    // area           area[f] = surface of filament f in units of mesh
+    //                triangles, f is 1 based. May be empty, then no surface
+    //                is shown.
     ColorAssignDialog(wxWindow                                *parent,
                       const wxString                          &filename,
                       const std::vector<std::string>          &model_colours,
                       const std::vector<Slot>                 &slots,
                       const std::vector<int>                  &proposal,
-                      const std::vector<Slic3r::ModelObject *> &objects);
+                      const std::vector<Slic3r::ModelObject *> &objects,
+                      const std::vector<double>               &area);
 
     // mapping()[i] is the 1 based slot that filament i goes to, with index 0
     // mapping to itself so it can be handed to ModelObject::remap_extruders()

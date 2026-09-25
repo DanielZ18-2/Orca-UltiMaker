@@ -6955,9 +6955,28 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 << __FUNCTION__ << ": model asks for " << size << " filaments, machine has "
                                 << machine_slots << ", proposal against the printer's colours" << proposed;
 
+                            // MakerBot / UltiMaker Fork: how much surface each
+                            // of the model's filaments covers, so the dialog
+                            // can say whether two rows sharing a slot matters.
+                            // Counted in mesh triangles, not in painting
+                            // leaves -- a finely painted region has many
+                            // leaves and no more surface.
+                            std::vector<double> colour_area(size_t(std::max(size, 16)) + 1, 0.0);
+                            {
+                                bool counted = ! model.objects.empty();
+                                for (const ModelObject *object : model.objects)
+                                    if (object != nullptr)
+                                        counted &= object->painted_area_by_filament(colour_area);
+                                if (! counted) {
+                                    BOOST_LOG_TRIVIAL(info)
+                                        << __FUNCTION__ << ": no surface figures -- a painting did not walk out";
+                                    colour_area.clear();
+                                }
+                            }
+
                             ColorAssignDialog assign(q, from_path(path.filename()),
                                                      file_origin.filament_colours, slots, proposal,
-                                                     model.objects);
+                                                     model.objects, colour_area);
                             if (assign.ShowModal() == wxID_OK) {
                                 const std::vector<int> chosen = assign.mapping();
 

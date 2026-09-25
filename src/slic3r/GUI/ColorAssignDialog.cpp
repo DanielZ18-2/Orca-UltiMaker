@@ -56,7 +56,8 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                                *pa
                                      const std::vector<std::string>          &model_colours,
                                      const std::vector<Slot>                 &slots,
                                      const std::vector<int>                  &proposal,
-                                     const std::vector<Slic3r::ModelObject *> &objects)
+                                     const std::vector<Slic3r::ModelObject *> &objects,
+                                     const std::vector<double>               &area)
     : DPIDialog(parent, wxID_ANY, _L("Assign the model's colours"), wxDefaultPosition, wxDefaultSize,
                 wxCAPTION | wxCLOSE_BOX)
     , m_model_colours(model_colours)
@@ -140,8 +141,15 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                                *pa
     // points at, and the slot itself. The third one is the answer to the
     // question the second half asks -- "which filament colour does this region
     // become" -- written next to the question instead of only in the picture.
-    auto *model_grid = new wxFlexGridSizer(0, 4, FromDIP(4), FromDIP(10));
-    model_grid->AddGrowableCol(3, 1);
+    auto *model_grid = new wxFlexGridSizer(0, 5, FromDIP(4), FromDIP(10));
+    model_grid->AddGrowableCol(4, 1);
+
+    // How much surface hangs on each row. The picture shows it, this puts a
+    // number on it -- the two together answer "does it matter if these two
+    // share a slot".
+    double area_total = 0.0;
+    for (size_t i = 1; i < area.size(); ++i)
+        area_total += area[i];
 
     wxArrayString slot_labels;
     for (size_t s = 0; s < slots.size(); ++s) {
@@ -193,6 +201,14 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                                *pa
 
         model_grid->Add(target, 0, wxALIGN_CENTER_VERTICAL);
         m_targets.push_back(target);
+
+        wxString surface;
+        if (i + 1 < area.size() && area_total > 0.0)
+            surface = wxString::Format(_L("%d triangles, %.1f%%"), int(area[i + 1] + 0.5),
+                                       100.0 * area[i + 1] / area_total);
+        auto *surface_text = new wxStaticText(model_box->GetStaticBox(), wxID_ANY, surface);
+        surface_text->SetForegroundColour(wxColour(0x6B, 0x6B, 0x6B));
+        model_grid->Add(surface_text, 0, wxALIGN_CENTER_VERTICAL);
     }
     model_box->Add(model_grid, 0, wxEXPAND | wxALL, FromDIP(8));
 
