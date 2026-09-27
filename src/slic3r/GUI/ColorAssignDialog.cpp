@@ -107,6 +107,10 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                                *pa
         wxString text = wxString::FromUTF8(slots[i].preset.c_str());
         if (! slots[i].material.empty())
             text += "   " + wxString::FromUTF8(slots[i].material.c_str());
+        // A free slot is not in the project yet; the preset it names is the
+        // one it will get.
+        if (slots[i].free)
+            text += "   " + _L("(new -- added in this colour when used)");
         slot_grid->Add(new wxStaticText(slot_box->GetStaticBox(), wxID_ANY, text), 0,
                        wxALIGN_CENTER_VERTICAL);
 
@@ -156,6 +160,8 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                                *pa
         wxString label = wxString::Format(_L("Slot %d"), int(s + 1));
         if (! slots[s].material.empty())
             label += "   " + wxString::FromUTF8(slots[s].material.c_str());
+        if (slots[s].free)
+            label += "   " + _L("New");
         slot_labels.Add(label);
     }
 

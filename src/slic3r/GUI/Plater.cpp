@@ -883,6 +883,19 @@ static int fixed_material_slot_count()
 // moves, so no slot is emptied by filling another, and the pass ends after at
 // most one round per slot.
 //
+// A slot without a colour is FREE: the machine has room there, the project
+// has no filament yet. It is nobody's nearest slot; the second pass fills it
+// like any idle slot. Since it takes on the colour of whatever moves in,
+// moving there costs nothing in colour, so the colour served worst -- by
+// surface times distance -- moves first. The colour it took is handed back in
+// filled, so the dialog can show it and the import can load it.
+//
+// A filled free slot carries a colour the first pass never saw. So a third
+// step looks once more at every colour still sharing a crowded slot, and moves
+// it to a filled free slot that is nearer. Nowhere else: every other slot
+// already was the nearest one it could have. Without free slots this step
+// changes nothing.
+//
 // That is not the optimal assignment and does not claim to be. It is the same
 // answer every time for the same file and printer, and one a reader can
 // follow.
@@ -893,11 +906,14 @@ static int fixed_material_slot_count()
 static std::vector<int> propose_slots_for_colours(const std::vector<std::string> &model_colours,
                                                   const std::vector<std::string> &slot_colours,
                                                   int                             highest,
-                                                  const std::vector<double>      &area)
+                                                  const std::vector<double>      &area,
+                                                  std::vector<std::string>       *filled = nullptr)
 {
     std::vector<int> proposal(size_t(std::max(highest, 0)), 1);
 
     const int slots = int(slot_colours.size());
+    if (filled != nullptr)
+        filled->assign(slot_colours.size(), std::string());
     if (slots < 1 || highest < 1)
         return proposal;
 
@@ -907,18 +923,23 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
         model_lab.emplace_back(hex_colour_to_lab(colour));
 
     std::vector<std::array<double, 3>> slot_lab;
+    std::vector<bool>                  is_free(size_t(slots), false);
     slot_lab.reserve(slot_colours.size());
-    for (const std::string &colour : slot_colours)
-        slot_lab.emplace_back(hex_colour_to_lab(colour));
+    for (int s = 0; s < slots; ++s) {
+        is_free[size_t(s)] = slot_colours[size_t(s)].empty();
+        slot_lab.emplace_back(hex_colour_to_lab(slot_colours[size_t(s)]));
+    }
 
     const int count = std::min(highest, int(model_lab.size()));
 
-    // Every distance once. At most 64 colours against at most 16 slots.
+    // Every distance once. At most 64 colours against at most 16 slots. A free
+    // slot stays at 0: whoever moves in brings the colour along.
     std::vector<double> dist(size_t(count) * size_t(slots), 0.0);
     auto at = [slots](int i, int s) { return size_t(i) * size_t(slots) + size_t(s); };
     for (int i = 0; i < count; ++i)
         for (int s = 0; s < slots; ++s)
-            dist[at(i, s)] = lab_distance(model_lab[size_t(i)], slot_lab[size_t(s)]);
+            if (! is_free[size_t(s)])
+                dist[at(i, s)] = lab_distance(model_lab[size_t(i)], slot_lab[size_t(s)]);
 
     auto weight = [&area](int i) {
         const size_t k = size_t(i) + 1;
@@ -927,12 +948,19 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
 
     // First pass: every colour to the slot it looks most like. No order, no
     // occupancy -- an orange region goes on the orange filament even when a
-    // bigger region has already claimed it.
-    std::vector<int> pick(size_t(count), 0);
+    // bigger region has already claimed it. A free slot does not look like
+    // anything yet and joins in only from the second pass on.
+    int first_set = 0;
+    while (first_set < slots && is_free[size_t(first_set)])
+        ++first_set;
+    if (first_set == slots)
+        first_set = 0; // a project always has a filament; stay defined anyway
+
+    std::vector<int> pick(size_t(count), first_set);
     for (int i = 0; i < count; ++i) {
-        int best = 0;
-        for (int s = 1; s < slots; ++s)
-            if (dist[at(i, s)] < dist[at(i, best)])
+        int best = first_set;
+        for (int s = first_set + 1; s < slots; ++s)
+            if (! is_free[size_t(s)] && dist[at(i, s)] < dist[at(i, best)])
                 best = s;
         pick[size_t(i)] = best;
     }
@@ -949,6 +977,7 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
     // The move happens even when it costs something. Two regions kept apart
     // is the thing the user is being asked about; a slightly better colour
     // match is not worth merging them for.
+    std::vector<int> taken_by(size_t(slots), -1); // the colour a free slot took
     for (int round = 0; round < slots; ++round) {
         std::vector<int> load(size_t(slots), 0);
         for (int i = 0; i < count; ++i)
@@ -978,10 +1007,44 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
         if (mover < 0)
             break;
         pick[size_t(mover)] = idle;
+        if (is_free[size_t(idle)])
+            taken_by[size_t(idle)] = mover;
+    }
+
+    // Third step, only where a free slot was filled; see above.
+    if (std::any_of(taken_by.begin(), taken_by.end(), [](int colour) { return colour >= 0; })) {
+        std::vector<int> load(size_t(slots), 0);
+        for (int i = 0; i < count; ++i)
+            ++load[size_t(pick[size_t(i)])];
+        for (int i = 0; i < count; ++i) {
+            const int from = pick[size_t(i)];
+            if (load[size_t(from)] < 2)
+                continue; // the only colour on its slot must stay
+            int    nearest      = from;
+            double nearest_dist = dist[at(i, from)];
+            for (int s = 0; s < slots; ++s) {
+                if (taken_by[size_t(s)] < 0)
+                    continue;
+                const double d = lab_distance(model_lab[size_t(i)], model_lab[size_t(taken_by[size_t(s)])]);
+                if (d < nearest_dist) {
+                    nearest      = s;
+                    nearest_dist = d;
+                }
+            }
+            if (nearest != from) {
+                --load[size_t(from)];
+                ++load[size_t(nearest)];
+                pick[size_t(i)] = nearest;
+            }
+        }
     }
 
     for (int i = 0; i < count; ++i)
         proposal[size_t(i)] = pick[size_t(i)] + 1;
+    if (filled != nullptr)
+        for (int s = 0; s < slots; ++s)
+            if (taken_by[size_t(s)] >= 0)
+                (*filled)[size_t(s)] = model_colours[size_t(taken_by[size_t(s)])];
     return proposal;
 }
 
@@ -7040,13 +7103,37 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 const ConfigOptionStrings *slot_colours =
                                     bundle->project_config.option<ConfigOptionStrings>("filament_colour");
                                 const std::vector<std::string> &slot_names = bundle->filament_presets;
+                                // MakerBot / UltiMaker Fork: how many filaments
+                                // the project has, counted in the sidebar as the
+                                // OK path below counts them. Not in slot_names:
+                                // on a machine with several nozzles
+                                // PresetBundle::update_multi_material_filament_presets()
+                                // pads that list back up to the nozzle count
+                                // when a filament is removed, so it can name a
+                                // filament the project does not have.
+                                const size_t filaments_now = sidebar->combos_filament().size();
                                 for (int s = 0; s < machine_slots; ++s) {
                                     ColorAssignDialog::Slot slot;
-                                    if (slot_colours != nullptr && size_t(s) < slot_colours->values.size())
+                                    // MakerBot / UltiMaker Fork: a slot the
+                                    // project has no filament for yet is free.
+                                    // It gets no colour here -- the proposal
+                                    // gives it one.
+                                    slot.free = size_t(s) >= filaments_now;
+                                    if (! slot.free && slot_colours != nullptr &&
+                                        size_t(s) < slot_colours->values.size())
                                         slot.colour = slot_colours->values[size_t(s)];
-                                    if (size_t(s) < slot_names.size()) {
-                                        slot.preset = slot_names[size_t(s)];
-                                        if (const Preset *fp = bundle->filaments.find_preset(slot_names[size_t(s)]))
+                                    // A free slot is named all the same, by the
+                                    // preset it will get: the one the list
+                                    // already holds for it, or else the last one,
+                                    // since a new filament is a copy of the last.
+                                    // Support material on a new slot has to be
+                                    // as visible as on any other.
+                                    size_t named = size_t(s);
+                                    if (named >= slot_names.size() && ! slot_names.empty())
+                                        named = slot_names.size() - 1;
+                                    if (named < slot_names.size()) {
+                                        slot.preset = slot_names[named];
+                                        if (const Preset *fp = bundle->filaments.find_preset(slot_names[named]))
                                             slot.material = fp->config.opt_string("filament_type", 0);
                                     }
                                     slots.push_back(slot);
@@ -7078,9 +7165,23 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             for (const ColorAssignDialog::Slot &slot : slots)
                                 slot_colour_list.push_back(slot.colour);
 
+                            std::vector<std::string> filled;
                             const std::vector<int> proposal =
                                 propose_slots_for_colours(file_origin.filament_colours, slot_colour_list, size,
-                                                          colour_area);
+                                                          colour_area, &filled);
+
+                            // MakerBot / UltiMaker Fork: a slot without a
+                            // colour -- a free one -- shows the colour the
+                            // proposal gave it, and is loaded in it on OK
+                            // unless the user picks another. The proposal
+                            // treats every slot without a colour as free, so
+                            // the test here is the same one.
+                            std::string free_slots;
+                            for (size_t s = 0; s < slots.size() && s < filled.size(); ++s)
+                                if (slots[s].colour.empty() && ! filled[s].empty()) {
+                                    slots[s].colour = filled[s];
+                                    free_slots += " " + std::to_string(s + 1) + "=" + filled[s];
+                                }
 
                             // The whole proposal, not only the part above the
                             // limit, goes to the log: a screenshot of the dialog
@@ -7094,7 +7195,8 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
 
                             BOOST_LOG_TRIVIAL(info)
                                 << __FUNCTION__ << ": model asks for " << size << " filaments, machine has "
-                                << machine_slots << ", proposal against the printer's colours" << proposed;
+                                << machine_slots << ", proposal against the printer's colours" << proposed
+                                << (free_slots.empty() ? std::string() : ", free slots filled" + free_slots);
 
                             ColorAssignDialog assign(q, from_path(path.filename()),
                                                      file_origin.filament_colours, slots, proposal,
@@ -7119,6 +7221,40 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 // a two colour gradient would otherwise keep
                                 // drawing the gradient over the new colour.
                                 const std::vector<std::string> final_colours = assign.final_slot_colours();
+
+                                // The list only ever grew. A slot the machine
+                                // does not have survives every import once it
+                                // exists, so it is taken away here.
+                                const int had = int(sidebar->combos_filament().size());
+                                if (had > machine_slots)
+                                    wxGetApp().preset_bundle->set_num_filaments(unsigned(machine_slots), std::string());
+
+                                // MakerBot / UltiMaker Fork: a free slot the
+                                // assignment uses becomes a filament now. Grown
+                                // one at a time, preset bundle first, as the loop
+                                // further down grows the list:
+                                // Plater::on_filament_count_change() on its own
+                                // only adds combo boxes, for filaments the bundle
+                                // does not have. set_num_filaments() colours a
+                                // new filament only when it also adds its preset,
+                                // and a machine with several nozzles has that
+                                // preset padded in already -- so the colour is
+                                // written again below, with all the others.
+                                int highest_used = 0;
+                                for (size_t i = 1; i < chosen.size(); ++i)
+                                    highest_used = std::max(highest_used, chosen[i]);
+                                const int kept   = std::min(had, machine_slots);
+                                const int target = std::max(kept, std::min(highest_used, machine_slots));
+                                for (int n = kept + 1; n <= target; ++n) {
+                                    std::string colour;
+                                    if (size_t(n - 1) < final_colours.size())
+                                        colour = final_colours[size_t(n - 1)];
+                                    if (colour.empty())
+                                        colour = Plater::get_next_color_for_filament().GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
+                                    wxGetApp().preset_bundle->set_num_filaments(unsigned(n), colour);
+                                    wxGetApp().plater()->on_filament_count_change(size_t(n));
+                                }
+
                                 {
                                     DynamicPrintConfig &cfg = wxGetApp().preset_bundle->project_config;
                                     auto *opt_colour = cfg.option<ConfigOptionStrings>("filament_colour");
@@ -7136,13 +7272,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                     }
                                 }
 
-                                // The list only ever grew. A slot the machine
-                                // does not have survives every import once it
-                                // exists, so it is taken away here.
-                                const int had = int(sidebar->combos_filament().size());
-                                if (had > machine_slots)
-                                    wxGetApp().preset_bundle->set_num_filaments(unsigned(machine_slots), std::string());
-                                wxGetApp().plater()->on_filament_count_change(machine_slots);
+                                wxGetApp().plater()->on_filament_count_change(size_t(target));
 
                                 // The sidebar draws each filament's colour into
                                 // the combo box once, when the combo is built.
@@ -7174,8 +7304,8 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                     << __FUNCTION__ << ": assigned, remapped=" << remapped << ", adopt_colours="
                                     << assign.adopt_colours() << ", slot colours picked by hand="
                                     << assign.slot_colours_edited() << ", filament list " << had << " -> "
-                                    << machine_slots << ", chosen" << taken;
-                                size = machine_slots;
+                                    << target << ", chosen" << taken;
+                                size = target;
                             } else {
                                 // MakerBot / UltiMaker Fork: cancelling the
                                 // assignment cancels the import, as cancelling the

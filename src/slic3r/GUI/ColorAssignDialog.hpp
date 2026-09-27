@@ -61,6 +61,12 @@ public:
         std::string colour;   // "#RRGGBB", as project_config carries it
         std::string preset;   // the filament preset's name
         std::string material; // filament_type -- support material must be visible
+        // The machine has room here, but the project has no filament yet. The
+        // slot is shown as new, carries the colour the proposal gave it and
+        // names the preset it will get. On OK it becomes a filament if a region
+        // is placed on it or on a free slot after it -- filaments are numbered
+        // without gaps.
+        bool        free{false};
     };
 
     // model_colours  the file's filament colours, index 0 is filament 1
