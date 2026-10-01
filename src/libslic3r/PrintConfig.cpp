@@ -7526,11 +7526,20 @@ void PrintConfigDef::init_fff_params()
                      "152 x 190 mm are usable, the rest being blocked by the "
                      "purge bucket and the gantry. The .makerbot container "
                      "reports the plate, so the printer's own display and its "
-                     "bounds check agree with the machine. Leave empty to fall "
-                     "back to the printable area.");
+                     "bounds check agree with the machine. 0 x 0 falls back to "
+                     "the printable area.");
     def->category = L("Machine");
     def->mode    = comDevelop;
-    def->set_default_value(new ConfigOptionFloats());
+    // MakerBot / UltiMaker Fork: 0 x 0 stands for "not stated", not an empty
+    // list. Every printer preset carries this key, and Orca reads an empty
+    // list back from a project file as a single 0
+    // (ConfigOptionFloatsTempl::deserialize turns an empty string into one
+    // value). With an empty default, every printer that states no plate got
+    // a different value back from its own project file -- the thirteen
+    // test_settings_roundtrip failures of orca-test-repo. machine_bounds() in
+    // MakerBotExport.cpp already treats a plate of 10 mm or less per side as
+    // not stated.
+    def->set_default_value(new ConfigOptionFloats { 0., 0. });
 }
 
 void PrintConfigDef::init_extruder_option_keys()
