@@ -13641,7 +13641,12 @@ void Plater::load_project(wxString const& filename2,
         wxGetApp().app_config->update_config_dir(into_path(originfile).parent_path().string());
     }
 
-    if (!load_restore)
+    // MakerBot / UltiMaker Fork: a geometry import is not a saved project --
+    // no file holds it (see where the plate is named above). Marked as saved,
+    // closing Orca or opening the next project would not offer to save it,
+    // where after an imported STL they do. reset() above dropped the saved
+    // mark, so the undo/redo stack now says what it says for an import.
+    if (!load_restore && !geometry_only)
         up_to_date(true, false);
     else
         p->dirty_state.update_from_undo_redo_stack(true);
@@ -13926,9 +13931,16 @@ void Plater::import_model_id(wxString download_info)
         BOOST_LOG_TRIVIAL(trace) << "import_model_id: target_path = " << target_path.string();
         /* load project */
         // Orca: If download is a zip file, treat it as if file has been drag and dropped on the plater
-        if (target_path.extension() == ".zip")
-            { wxArrayString arr; arr.Add(from_path(target_path)); this->load_files(arr); }
-        else
+        if (target_path.extension() == ".zip") {
+            wxArrayString arr; arr.Add(from_path(target_path)); this->load_files(arr);
+            // show save new project
+            p->set_project_filename(target_path.wstring());
+        } else
+            // MakerBot / UltiMaker Fork: load_project() names the project
+            // itself -- after the file when it opens as a project, after the
+            // plate only when the geometry alone was imported, not at all
+            // when the question was cancelled. Naming it again here undid the
+            // second and renamed the untouched project in the third.
             this->load_project(from_path(target_path));
         /*BBS set project info after load project, project info is reset in load project */
         //p->project.project_model_id = model_id;
@@ -13938,8 +13950,6 @@ void Plater::import_model_id(wxString download_info)
             p->project.project_country_code = config->get_country_code();
         }
 
-        // show save new project
-        p->set_project_filename(target_path.wstring());
         p->notification_manager->push_import_finished_notification(target_path.string(), target_path.parent_path().string(), false);
     }
     else {
