@@ -5687,6 +5687,10 @@ struct Plater::priv
 
     // BBS: backup & restore
     std::vector<size_t> load_files(const std::vector<fs::path>& input_files, LoadStrategy strategy, bool ask_multi = false);
+    // MakerBot / UltiMaker Fork: set by load_files() when the settings of a 3MF
+    // were taken into the presets -- the file was read as a project, not as
+    // geometry alone. load_project() clears it before it loads.
+    bool last_3mf_was_project{false};
     std::vector<size_t> load_model_objects(const ModelObjectPtrs& model_objects, bool allow_negative_z = false, bool split_object = false, bool auto_drop = true);
 
     fs::path get_export_file_path(GUI::FileType file_type);
@@ -8038,6 +8042,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             // when for extruder colors are used filament colors
                             q->on_filament_count_change(preset_bundle->filament_presets.size());
                             is_project_file = true;
+                            last_3mf_was_project = true;
 
                             DynamicConfig& proj_cfg = preset_bundle->project_config;
                             // do some post process after loading config
@@ -13771,7 +13776,22 @@ void Plater::load_project(wxString const& filename2,
     if (strategy & LoadStrategy::Restore)
         input_paths.push_back(into_u8(originfile));
 
+    p->last_3mf_was_project = false;
     std::vector<size_t> res = load_files(input_paths, strategy);
+
+    // MakerBot / UltiMaker Fork: asked to open a project, Orca may still take
+    // nothing but the geometry out of a 3MF -- always out of one PrusaSlicer
+    // made, and out of any that carries no settings of its own. load_files()
+    // clears load_config for both, mostly with "... loading geometry data
+    // only.". Such a file is not the project either, any more than after
+    // "Import geometry only": adopted, Save wrote the user's printer and
+    // process into a file that never carried any.
+    if (!res.empty() && !geometry_only && !load_restore && !(strategy & LoadStrategy::Silence) &&
+        !using_exported_file() && !p->last_3mf_was_project && boost::algorithm::iends_with(path.string(), ".3mf")) {
+        geometry_only = true;
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << __LINE__
+                                << " only the geometry was taken out of the file: " << filename;
+    }
 
     reset_project_dirty_initial_presets();
     update_project_dirty_from_presets();
