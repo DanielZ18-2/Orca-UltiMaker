@@ -776,6 +776,11 @@ static double lab_distance(const std::array<double, 3> &a, const std::array<doub
 //  - our own machines, by flavor: one filament per head, no material changer.
 //    See flavor_has_fixed_filament_slots().
 //
+//  - a single extruder multi material machine whose profile states how many
+//    filaments its material changer holds, in printer_max_filaments. That is
+//    the only way to know: single_extruder_multi_material is Orca's default,
+//    and a machine with a changer carries it exactly like one without.
+//
 //  - everyone else's machines with single_extruder_multi_material off and at
 //    least two heads: toolchangers and IDEX, one filament per head.
 //
@@ -785,10 +790,8 @@ static double lab_distance(const std::array<double, 3> &a, const std::array<doub
 //    the Flashforge Adventurer 5M among them. A second filament there may well
 //    be a manual swap, and nothing says how many the owner means to make.
 //
-//  - one head with single_extruder_multi_material on. That is Orca's default,
-//    and a machine with a material changer carries it exactly like one
-//    without: the profile cannot tell them apart, let alone count the
-//    changer's slots.
+//  - one head with single_extruder_multi_material on and no number of filament
+//    slots stated -- the profile cannot tell a changer from none.
 //
 //  - Bambu Lab: the AMS is read from the printer.
 static int printer_filament_limit()
@@ -805,7 +808,14 @@ static int printer_filament_limit()
         return heads;
 
     const ConfigOptionBool *semm = printer.config.option<ConfigOptionBool>("single_extruder_multi_material");
-    if (semm != nullptr && ! semm->value && heads >= 2)
+    if (semm != nullptr && semm->value) {
+        const ConfigOptionInt *slots = printer.config.option<ConfigOptionInt>("printer_max_filaments");
+        if (slots != nullptr && slots->value > 0)
+            return std::min(slots->value, int(MAXIMUM_EXTRUDER_NUMBER));
+        return 0;
+    }
+
+    if (semm != nullptr && heads >= 2)
         return heads;
 
     return 0;
@@ -831,11 +841,15 @@ static int printer_filament_limit()
 //    single_extruder_multi_material 0) carried five filaments with no way to
 //    remove one, because Orca hides both list buttons for this whole group.
 //
-// This is deliberately WIDER than printer_filament_limit(). It governs the
-// two list buttons and the guard in add_custom_filament(), where the worst
-// case is a button that does not appear. printer_filament_limit() governs the
-// import, which RENUMBERS A MODEL, and of everyone else's machines takes only
-// those with two or more heads.
+// This is deliberately not the group printer_filament_limit() takes. This one
+// governs the two list buttons and the guard in add_custom_filament(), where
+// the worst case is a button that does not appear, so it takes every machine
+// with fixed material, one head or more. printer_filament_limit() governs the
+// import, which RENUMBERS A MODEL: of everyone else's machines it takes those
+// with two or more heads, and those whose profile states the slots of a
+// material changer in printer_max_filaments. The latter are left out here --
+// the slots of a changer are not fixed material, and the plus button stays as
+// Orca has it.
 static int fixed_material_slot_count()
 {
     PresetBundle *bundle = wxGetApp().preset_bundle;

@@ -80,8 +80,10 @@ inline bool flavor_has_pressure_advance(GCodeFlavor flavor)
 // multi colour model onto one filament. Orca has no key that states a
 // machine's filament capacity -- Sidebar::add_filament() bounds it by
 // MAXIMUM_EXTRUDER_NUMBER alone, and single_extruder_multi_material defaults
-// to true and is set by neither vendor -- so for an unknown machine the honest
-// answer is "no limit known", and nothing is clamped.
+// to true and is set by neither vendor. A profile can state it in
+// printer_max_filaments, which only the 3MF import reads; without that, the
+// honest answer for an unknown machine is "no limit known", and nothing is
+// clamped.
 inline bool flavor_has_fixed_filament_slots(GCodeFlavor flavor)
 {
     return flavor == gcfMakerBotLegacy || flavor == gcfMakerBotBirdwing ||
@@ -1467,6 +1469,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionStrings,             filament_start_gcode))
     ((ConfigOptionBool,                single_extruder_multi_material))
     ((ConfigOptionBool,                manual_filament_change))
+    // MakerBot / UltiMaker Fork: filament slots of a material changer, 0 = not stated
+    ((ConfigOptionInt,                 printer_max_filaments))
     ((ConfigOptionBool,                single_extruder_multi_material_priming))
     ((ConfigOptionBool,                wipe_tower_no_sparse_layers))
     ((ConfigOptionString,              change_filament_gcode))

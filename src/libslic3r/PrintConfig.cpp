@@ -6082,6 +6082,24 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
+    // MakerBot / UltiMaker Fork: how many filaments the material changer of a
+    // single extruder multi material machine holds. Nothing else in a profile
+    // says so: single_extruder_multi_material is set alike on machines with
+    // and without a changer. Without this number a 3MF imported as geometry
+    // only grows the filament list to whatever the model uses; with it, the
+    // model's colours are assigned to the slots that exist, as on machines
+    // with one filament per head. See printer_filament_limit() in Plater.cpp.
+    def = this->add("printer_max_filaments", coInt);
+    def->label = L("Filament slots");
+    def->tooltip = L("How many filaments the material changer holds at once, for example 5 for an MMU3. "
+                     "A 3MF imported as geometry only that uses more filaments asks which of these slots "
+                     "each of its colours goes to. 0 means not stated: the filament list then grows to "
+                     "whatever the model uses.");
+    def->min = 0;
+    def->max = MAXIMUM_EXTRUDER_NUMBER;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionInt(0));
+
     def = this->add("wipe_tower_type", coEnum);
     def->label = L("Wipe tower type");
     def->tooltip = L("Choose the wipe tower implementation for multi-material prints. Type 1 is recommended for Bambu and Qidi printers with a filament cutter. Type 2 offers better compatibility with multi-tool and MMU printers and provide overall better compatibility.");

@@ -5107,6 +5107,9 @@ if (is_marlin_flavor)
             });
         };
         optgroup->append_single_option_line("manual_filament_change", "printer_multimaterial_setup#manual-filament-change");
+        // MakerBot / UltiMaker Fork: filament slots of the material changer.
+        // Enabled and shown by toggle_options().
+        optgroup->append_single_option_line("printer_max_filaments");
         optgroup->append_single_option_line("bed_temperature_formula", "printer_basic_information_advanced#bed-temperature-type");
 
         optgroup = page->new_optgroup(L("Wipe tower"), "param_tower");
@@ -5603,6 +5606,15 @@ void TabPrinter::toggle_options()
         }
         toggle_option("extruders_count", !bSEMM);
         toggle_option("manual_filament_change", bSEMM);
+
+        // MakerBot / UltiMaker Fork: the slots are the material changer's, so
+        // the number means something only with a single extruder multi
+        // material setup. Our own machines hold one filament per head, which
+        // their flavor already says, and a Bambu Lab printer reports its AMS
+        // itself. See printer_filament_limit() in Plater.cpp.
+        toggle_line("printer_max_filaments", !is_BBL_printer);
+        toggle_option("printer_max_filaments",
+                      bSEMM && !flavor_has_fixed_filament_slots(m_config->opt_enum<GCodeFlavor>("gcode_flavor")));
         toggle_option("purge_in_prime_tower", bSEMM && supports_wipe_tower_2);
 
         // Orca: "Tool change on wipe tower" only makes sense for multi-extruder (multi-toolhead) printers
