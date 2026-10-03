@@ -39,6 +39,30 @@ static wxColour colour_from_hex(const std::string &hex)
     return wxColour(0x9A, 0x9A, 0x9A);
 }
 
+namespace {
+
+// MakerBot / UltiMaker Fork: a colour patch never takes the keyboard focus.
+// As a plain wxPanel without children it did: Tab stopped on every patch --
+// three for the printer's slots, two in each row of the model's colours --,
+// nothing showed where the focus was, and the keys pressed there did
+// nothing. A slot's patch answers a click; from the keyboard the "Change"
+// button beside it does the same. AcceptsFocusFromKeyboard() takes the patch
+// out of the tab order. SetCanFocus(false) keeps GTK from giving it the
+// focus as well when the dialog opens, before wx has built that order.
+class ColourPatch : public wxPanel
+{
+public:
+    ColourPatch(wxWindow *parent, const wxSize &size)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, size, wxBORDER_SIMPLE)
+    {
+        SetCanFocus(false);
+    }
+
+    bool AcceptsFocusFromKeyboard() const override { return false; }
+};
+
+} // namespace
+
 // A plain filled rectangle. Deliberately not a ColorPanel from
 // DragDropPanel.hpp: that one carries drag and drop behaviour this dialog
 // does not want, because dragging cannot be done from the keyboard.
@@ -46,7 +70,7 @@ static wxColour colour_from_hex(const std::string &hex)
 // The colour itself is put on in paint_swatches(), after the dark mode pass.
 static wxPanel *colour_patch(wxWindow *parent, const wxSize &size)
 {
-    auto *patch = new wxPanel(parent, wxID_ANY, wxDefaultPosition, size, wxBORDER_SIMPLE);
+    auto *patch = new ColourPatch(parent, size);
     patch->SetMinSize(size);
     return patch;
 }
@@ -185,6 +209,28 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                                *pa
         auto *target = new ComboBox(model_box->GetStaticBox(), wxID_ANY, wxEmptyString,
                                     wxDefaultPosition, wxSize(FromDIP(240), -1), 0, nullptr,
                                     wxCB_READONLY);
+#ifdef __WXGTK__
+        // MakerBot / UltiMaker Fork: on GTK a read-only ComboBox cannot take
+        // the keyboard focus (seen on 2026-10-03: the arrow keys did nothing).
+        // A ComboBox is a TextInput, a wxNavigationEnabled container, and its
+        // text field counts as a focusable child even while hidden. wx
+        // therefore marks the box itself as unfocusable, SetFocus() passes
+        // the focus on to the hidden field, which cannot take it, and Tab
+        // goes past the box -- ComboBox::keyDown, which moves the choice on
+        // the arrow keys, never gets a key. SetCanFocus(true) lifts the mark.
+        // wx sets it again only when the box gets or loses a child, which a
+        // box without item groups does not do after its constructor.
+        target->SetCanFocus(true);
+        // Space and Enter would open the list, and on GTK the open list holds
+        // the keyboard without reading it: no key closes it again, not even
+        // Escape, only a mouse click does. From the keyboard the arrow keys
+        // choose the slot.
+        target->Bind(wxEVT_KEY_DOWN, [](wxKeyEvent &e) {
+            if (e.GetKeyCode() == WXK_SPACE || e.GetKeyCode() == WXK_RETURN)
+                return;
+            e.Skip();
+        });
+#endif
         for (const wxString &label : slot_labels)
             target->Append(label);
 
