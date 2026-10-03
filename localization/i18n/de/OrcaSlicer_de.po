@@ -22342,3 +22342,139 @@ msgid ""
 "How many filaments the material changer holds at once, for example 5 for an MMU3. A 3MF imported as geometry only that uses more filaments asks which of these slots each of its colours goes to. 0 means not stated: the filament list then grows to whatever the model uses."
 msgstr ""
 "Wie viele Filamente der Materialwechsler gleichzeitig fasst, zum Beispiel 5 bei einer MMU3. Verwendet eine nur als Geometrie importierte 3MF mehr Filamente, wird gefragt, auf welchen dieser Slots jede ihrer Farben kommt. 0 heißt nicht angegeben: Die Filamentliste wächst dann auf so viele Filamente, wie das Modell verwendet."
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Z offset / first layer calibration"
+msgstr "Z-Offset / Kalibrierung der ersten Schicht"
+
+#: src/slic3r/GUI/calib_dlg.cpp
+msgid "Start layer height: "
+msgstr "Start-Schichthöhe: "
+
+#: src/slic3r/GUI/calib_dlg.cpp
+msgid "End layer height: "
+msgstr "End-Schichthöhe: "
+
+#: src/slic3r/GUI/calib_dlg.cpp
+msgid ""
+"Please input valid values:\n"
+"start >= 0.02\n"
+"step > 0\n"
+"end > start + step"
+msgstr ""
+"Bitte geben Sie gültige Werte ein:\n"
+"Start >= 0.02\n"
+"Schritt > 0\n"
+"Ende > Start + Schritt"
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "Z offset calibration: the printer's bed is too small for this test."
+msgstr ""
+"Z-Offset-Kalibrierung: Das Druckbett dieses Druckers ist für diesen Test zu klein."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "Z offset calibration: could not build the test model."
+msgstr "Z-Offset-Kalibrierung: Das Testmodell konnte nicht erstellt werden."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "Z offset test:"
+msgstr "Z-Offset-Test:"
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "%d tiles."
+msgstr "%d Felder."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"Tile 1 (first in the row) has the smallest nozzle-to-bed gap; the gap grows toward the last tile. Pick the smoothest tile -- its position gives the offset."
+msgstr ""
+"Feld 1 (das erste der Reihe) hat den kleinsten Abstand zwischen Düse und Druckbett; zum letzten Feld hin wird er größer. Wählen Sie das glatteste Feld – seine Position ergibt den Offset."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "Failed to build the native printer archive. Please slice again."
+msgstr ""
+"Das druckerspezifische Archiv konnte nicht erstellt werden. Bitte slicen Sie erneut."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid ""
+"Default true jerk, for firmware that takes a jerk instead of a velocity step."
+msgstr ""
+"Standardwert des echten Rucks, für Firmware, die einen Ruck statt eines Geschwindigkeitssprungs erwartet."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk of outer walls."
+msgstr "Echter Ruck der Außenwände."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk of inner walls."
+msgstr "Echter Ruck der Innenwände."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk for infill."
+msgstr "Echter Ruck für die Füllung."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk for top surface."
+msgstr "Echter Ruck für die obere Oberfläche."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk for the first layer."
+msgstr "Echter Ruck für die erste Schicht."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk for travel."
+msgstr "Echter Ruck für den Eilgang."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True travel jerk of the first layer."
+msgstr "Echter Ruck des Eilgangs in der ersten Schicht."
+
+#: src/slic3r/GUI/Tab.cpp
+msgid "Jerk(XY), Cheetah firmware"
+msgstr "Jerk(XY), Cheetah-Firmware"
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "LABS hot (firmware only)"
+msgstr "LABS Hochtemperatur (nur in der Firmware)"
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "Build plate size"
+msgstr "Größe der Druckplatte"
+
+#: src/libslic3r/PrintConfig.cpp
+msgid ""
+"Physical build plate as [width, depth] in millimetres. This is NOT the printable area: MakerBot's Method series has a plate of 283.3 x 236.48 mm of which only 152 x 190 mm are usable, the rest being blocked by the purge bucket and the gantry. The .makerbot container reports the plate, so the printer's own display and its bounds check agree with the machine. 0 x 0 falls back to the printable area."
+msgstr ""
+"Physische Druckplatte als [Breite, Tiefe] in Millimetern. Das ist NICHT der druckbare Bereich: Die Method-Reihe von MakerBot hat eine Platte von 283,3 x 236,48 mm, von der nur 152 x 190 mm nutzbar sind; den Rest belegen der Reinigungsbehälter und das Portal. Der .makerbot-Container meldet die Platte, damit die Anzeige des Druckers und seine Bereichsprüfung zur Maschine passen. 0 x 0 fällt auf den druckbaren Bereich zurück."
+
+#: src/slic3r/GUI/AboutDialog.cpp
+msgid ""
+"Unofficial fork for MakerBot and UltiMaker - not affiliated with the OrcaSlicer project."
+msgstr ""
+"Inoffizieller Fork für MakerBot und UltiMaker – steht in keiner Verbindung zum OrcaSlicer-Projekt."
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid "Choose what to heat and to which temperature."
+msgstr "Wählen Sie, was auf welche Temperatur geheizt wird."
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid "Nozzle 1"
+msgstr "Düse 1"
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid "Nozzle 2"
+msgstr "Düse 2"
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid ""
+"Values come from the active filament profile. The printer does not wait for the target."
+msgstr ""
+"Die Werte stammen aus dem aktiven Filamentprofil. Der Drucker wartet nicht, bis die Zieltemperatur erreicht ist."
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid "No heater selected."
+msgstr "Keine Heizung ausgewählt."
+
+#: src/slic3r/GUI/PhysicalPrinterDialog.cpp
+msgid "Connected"
+msgstr "Verbunden"

@@ -20956,3 +20956,133 @@ msgstr ""
 msgid ""
 "How many filaments the material changer holds at once, for example 5 for an MMU3. A 3MF imported as geometry only that uses more filaments asks which of these slots each of its colours goes to. 0 means not stated: the filament list then grows to whatever the model uses."
 msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Z offset / first layer calibration"
+msgstr ""
+
+#: src/slic3r/GUI/calib_dlg.cpp
+msgid "Start layer height: "
+msgstr ""
+
+#: src/slic3r/GUI/calib_dlg.cpp
+msgid "End layer height: "
+msgstr ""
+
+#: src/slic3r/GUI/calib_dlg.cpp
+msgid ""
+"Please input valid values:\n"
+"start >= 0.02\n"
+"step > 0\n"
+"end > start + step"
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "Z offset calibration: the printer's bed is too small for this test."
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "Z offset calibration: could not build the test model."
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "Z offset test:"
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "%d tiles."
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"Tile 1 (first in the row) has the smallest nozzle-to-bed gap; the gap grows toward the last tile. Pick the smoothest tile -- its position gives the offset."
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "Failed to build the native printer archive. Please slice again."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid ""
+"Default true jerk, for firmware that takes a jerk instead of a velocity step."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk of outer walls."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk of inner walls."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk for infill."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk for top surface."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk for the first layer."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True jerk for travel."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "True travel jerk of the first layer."
+msgstr ""
+
+#: src/slic3r/GUI/Tab.cpp
+msgid "Jerk(XY), Cheetah firmware"
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "LABS hot (firmware only)"
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "Build plate size"
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid ""
+"Physical build plate as [width, depth] in millimetres. This is NOT the printable area: MakerBot's Method series has a plate of 283.3 x 236.48 mm of which only 152 x 190 mm are usable, the rest being blocked by the purge bucket and the gantry. The .makerbot container reports the plate, so the printer's own display and its bounds check agree with the machine. 0 x 0 falls back to the printable area."
+msgstr ""
+
+#: src/slic3r/GUI/AboutDialog.cpp
+msgid ""
+"Unofficial fork for MakerBot and UltiMaker - not affiliated with the OrcaSlicer project."
+msgstr ""
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid "Choose what to heat and to which temperature."
+msgstr ""
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid "Nozzle 1"
+msgstr ""
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid "Nozzle 2"
+msgstr ""
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid ""
+"Values come from the active filament profile. The printer does not wait for the target."
+msgstr ""
+
+#: src/slic3r/GUI/DeviceTab/MakerbotDevicePanel.cpp
+msgid "No heater selected."
+msgstr ""
+
+#: src/slic3r/GUI/PhysicalPrinterDialog.cpp
+msgid "Connected"
+msgstr ""
+
+#: src/slic3r/GUI/calib_dlg.cpp
+msgid ""
+"Each patch is printed at a different commanded layer height and is labeled with a printed flag showing that height. Pick the patch with the cleanest first layer, then change the printer's Z offset by (patch height - first layer height)."
+msgstr ""
