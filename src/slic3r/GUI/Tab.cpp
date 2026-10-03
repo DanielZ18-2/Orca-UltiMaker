@@ -5516,6 +5516,26 @@ void TabPrinter::on_gcode_flavor_changed()
     // is nothing here to repair.
 }
 
+// MakerBot / UltiMaker Fork: twin of the function of the same name in
+// Plater.cpp -- one of this fork's own machines, recognised by its model.
+// Those use their number of heads as the number of filament slots, so
+// "Filament slots" means nothing for them, whatever their flavor.
+static bool printer_model_is_makerbot_or_ultimaker(const PresetBundle *bundle, const DynamicPrintConfig &config)
+{
+    const ConfigOptionString *model = config.option<ConfigOptionString>("printer_model");
+    if (bundle == nullptr || model == nullptr || model->value.empty())
+        return false;
+    for (const char *vendor_id : {"MakerBot", "UltiMaker"}) {
+        const auto vendor = bundle->vendors.find(vendor_id);
+        if (vendor == bundle->vendors.end())
+            continue;
+        for (const VendorProfile::PrinterModel &m : vendor->second.models)
+            if (m.name == model->value)
+                return true;
+    }
+    return false;
+}
+
 void TabPrinter::toggle_options()
 {
     if (!m_active_page || m_presets->get_edited_preset().printer_technology() == ptSLA)
@@ -5610,11 +5630,13 @@ void TabPrinter::toggle_options()
         // MakerBot / UltiMaker Fork: the slots are the material changer's, so
         // the number means something only with a single extruder multi
         // material setup. Our own machines hold one filament per head, which
-        // their flavor already says, and a Bambu Lab printer reports its AMS
+        // their flavor says -- for the Original and Original+, which run
+        // Marlin, their model --, and a Bambu Lab printer reports its AMS
         // itself. See printer_filament_limit() in Plater.cpp.
         toggle_line("printer_max_filaments", !is_BBL_printer);
         toggle_option("printer_max_filaments",
-                      bSEMM && !flavor_has_fixed_filament_slots(m_config->opt_enum<GCodeFlavor>("gcode_flavor")));
+                      bSEMM && !flavor_has_fixed_filament_slots(m_config->opt_enum<GCodeFlavor>("gcode_flavor")) &&
+                          !printer_model_is_makerbot_or_ultimaker(m_preset_bundle, *m_config));
         toggle_option("purge_in_prime_tower", bSEMM && supports_wipe_tower_2);
 
         // Orca: "Tool change on wipe tower" only makes sense for multi-extruder (multi-toolhead) printers

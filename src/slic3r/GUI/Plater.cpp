@@ -769,12 +769,42 @@ static double lab_distance(const std::array<double, 3> &a, const std::array<doub
     return std::sqrt(tL * tL + tC * tC + tH * tH + Rt * tC * tH);
 }
 
+// MakerBot / UltiMaker Fork: is the selected printer one of this fork's own
+// machines? Decided by its model, the way PresetBundle::get_current_vendor_type()
+// tells a Bambu Lab printer -- not by the preset name, which can be anything,
+// and not by the flavor alone: the UltiMaker Original and Original+ run Marlin
+// like thousands of other machines, and flavor_has_fixed_filament_slots()
+// rightly does not name Marlin. For the two of them this is the only test that
+// says "one filament per head, no material changer".
+//
+// Not to be confused with printer_is_makerbot_or_ultimaker() further up, a
+// substring test on a lower-cased identity string for the Smart Extruder
+// hints. Tab.cpp carries a twin of this function for the "Filament slots"
+// setting.
+static bool printer_model_is_makerbot_or_ultimaker(const PresetBundle &bundle, const DynamicPrintConfig &printer_config)
+{
+    const ConfigOptionString *model = printer_config.option<ConfigOptionString>("printer_model");
+    if (model == nullptr || model->value.empty())
+        return false;
+    for (const char *vendor_id : {"MakerBot", "UltiMaker"}) {
+        const auto vendor = bundle.vendors.find(vendor_id);
+        if (vendor == bundle.vendors.end())
+            continue;
+        for (const VendorProfile::PrinterModel &m : vendor->second.models)
+            if (m.name == model->value)
+                return true;
+    }
+    return false;
+}
+
 // MakerBot / UltiMaker Fork: how many filaments the selected machine can hold
 // at once, or 0 when that is not known. The geometry import renumbers a model
 // down to this number, so a number is only given where it is certain:
 //
 //  - our own machines, by flavor: one filament per head, no material changer.
-//    See flavor_has_fixed_filament_slots().
+//    See flavor_has_fixed_filament_slots(). The UltiMaker Original and
+//    Original+ run Marlin and are recognised by their model instead, see
+//    printer_model_is_makerbot_or_ultimaker().
 //
 //  - a single extruder multi material machine whose profile states how many
 //    filaments its material changer holds, in printer_max_filaments. That is
@@ -806,6 +836,12 @@ static int printer_filament_limit()
     const ConfigOptionEnum<GCodeFlavor> *flavor = printer.config.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor");
     if (flavor != nullptr && flavor_has_fixed_filament_slots(flavor->value))
         return heads;
+    // The Original and Original+: one head, Marlin, no changer. Without this
+    // they fell through to the test below -- single_extruder_multi_material
+    // is on by Orca's default, printer_max_filaments 0 -- and a multi colour
+    // geometry import grew their filament list as before this fork.
+    if (printer_model_is_makerbot_or_ultimaker(*bundle, printer.config))
+        return heads;
 
     const ConfigOptionBool *semm = printer.config.option<ConfigOptionBool>("single_extruder_multi_material");
     if (semm != nullptr && semm->value) {
@@ -827,8 +863,10 @@ static int printer_filament_limit()
 //
 // Two groups fall in here:
 //
-//  - our own machines, by flavor. Their profiles leave
-//    single_extruder_multi_material at its default, which is TRUE, so the
+//  - our own machines, by flavor -- the Original and Original+, which run
+//    Marlin, by model (printer_model_is_makerbot_or_ultimaker()). Their
+//    profiles leave single_extruder_multi_material at its default, which is
+//    TRUE, so the
 //    profile alone would sort a two head Method X into the wrong group. That
 //    default is wrong for them and should be set to 0 in the profiles; until
 //    that is done and tested, the flavor stands in for it.
@@ -859,7 +897,8 @@ static int fixed_material_slot_count()
     const Preset &printer = bundle->printers.get_edited_preset();
 
     const ConfigOptionEnum<GCodeFlavor> *flavor = printer.config.option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor");
-    const bool ours = flavor != nullptr && flavor_has_fixed_filament_slots(flavor->value);
+    const bool ours = (flavor != nullptr && flavor_has_fixed_filament_slots(flavor->value)) ||
+                      printer_model_is_makerbot_or_ultimaker(*bundle, printer.config);
 
     const ConfigOptionBool *semm = printer.config.option<ConfigOptionBool>("single_extruder_multi_material");
     const bool fixed_material = semm != nullptr && ! semm->value;
@@ -4775,6 +4814,10 @@ bool Sidebar::should_show_SEMM_buttons()
             _fl == gcfCheetah)
             return false;
     }
+    // The UltiMaker Original and Original+ run Marlin; their model says what
+    // their flavor cannot. See printer_model_is_makerbot_or_ultimaker().
+    if (printer_model_is_makerbot_or_ultimaker(preset_bundle, cfg))
+        return false;
 
     return cfg.opt_bool("single_extruder_multi_material") || is_bbl_vendor;
 }
