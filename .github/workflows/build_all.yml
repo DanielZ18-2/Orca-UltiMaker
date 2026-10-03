@@ -259,7 +259,10 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: OrcaSlicer-Linux-flatpak_${{ env.ver }}_${{ matrix.variant.arch }}.flatpak
-        path: '/__w/OrcaSlicer/OrcaSlicer/OrcaSlicer-Linux-flatpak_${{ env.ver }}_${{ matrix.variant.arch }}.flatpak'
+        # MakerBot / UltiMaker Fork: relative to the workspace, where the
+        # flatpak-builder step above writes the bundle. The absolute path named
+        # upstream's checkout and found nothing in a fork.
+        path: 'OrcaSlicer-Linux-flatpak_${{ env.ver }}_${{ matrix.variant.arch }}.flatpak'
     - name: Deploy Flatpak to nightly release
       if: github.repository == 'OrcaSlicer/OrcaSlicer' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/belt-printer')
       uses: WebFreak001/deploy-nightly@v3.2.0
