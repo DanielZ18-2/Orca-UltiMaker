@@ -20867,3 +20867,92 @@ msgstr ""
 msgid ""
 "The MakerBot slicer lists PLA as the only material for the %s, and the machine has no heated build platform. For other materials a retrofitted heated build platform is recommended. The values in this profile already assume one is fitted. To reach them, switch on \"Support multi bed types\" in the printer settings and select the High Temp Plate; without a heated platform the printer keeps the plate at 0 degrees."
 msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Assign the model's colours"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "%s uses %d colours. Your printer has %d filament slots."
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Slots of your printer"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Click to choose the colour of this filament slot"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "(new -- added in this colour when used)"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Change"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Choose the colour of slot %d"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid ""
+"Below, the left colour is the model's and comes from the file. The one beside it is the filament it would be printed in."
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Colours of the model"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Slot %d"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "The filament colour this region will be printed in"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "%d triangles, %.1f%%"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "How it would come out"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Also take the model's colours over into the printer's filament slots"
+msgstr ""
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "A slot whose colour you changed above keeps your colour."
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"%s is set up for %d filaments, and this printer holds one. Everything is printed with filament 1; the file itself is not changed."
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"This file was made for the same printer with a different nozzle: the file says %s mm, your preset says %s mm."
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "This file was made for %s."
+msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"Opening it as a project replaces your printer preset %s, and with it the nozzle diameter and the process settings. Importing the geometry only keeps yours."
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "Filament slots"
+msgstr ""
+
+#: src/libslic3r/PrintConfig.cpp
+msgid ""
+"How many filaments the material changer holds at once, for example 5 for an MMU3. A 3MF imported as geometry only that uses more filaments asks which of these slots each of its colours goes to. 0 means not stated: the filament list then grows to whatever the model uses."
+msgstr ""

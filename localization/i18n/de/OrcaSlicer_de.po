@@ -22247,3 +22247,98 @@ msgid ""
 "The MakerBot slicer lists PLA as the only material for the %s, and the machine has no heated build platform. For other materials a retrofitted heated build platform is recommended. The values in this profile already assume one is fitted. To reach them, switch on \"Support multi bed types\" in the printer settings and select the High Temp Plate; without a heated platform the printer keeps the plate at 0 degrees."
 msgstr ""
 "Der MakerBot-Slicer führt für den %s PLA als einziges Material, und die Maschine hat keine beheizte Bauplattform. Für andere Materialien wird eine nachgerüstete beheizte Bauplattform empfohlen. Die Werte in diesem Profil setzen eine solche bereits voraus. Damit sie greifen, schalten Sie im Druckerprofil „Support multi bed types“ ein und wählen Sie die High Temp Plate; ohne beheizte Plattform hält der Drucker die Plattform auf 0 Grad."
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Assign the model's colours"
+msgstr "Farben des Modells zuordnen"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "%s uses %d colours. Your printer has %d filament slots."
+msgstr "%s verwendet %d Farben. Ihr Drucker hat %d Filament-Slots."
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Slots of your printer"
+msgstr "Slots Ihres Druckers"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Click to choose the colour of this filament slot"
+msgstr "Klicken, um die Farbe dieses Filament-Slots zu wählen"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "(new -- added in this colour when used)"
+msgstr "(neu – wird bei Verwendung in dieser Farbe angelegt)"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Change"
+msgstr "Ändern"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Choose the colour of slot %d"
+msgstr "Farbe von Slot %d wählen"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid ""
+"Below, the left colour is the model's and comes from the file. The one beside it is the filament it would be printed in."
+msgstr ""
+"Unten ist jeweils die linke Farbe die des Modells und stammt aus der Datei. Die Farbe daneben ist das Filament, mit dem sie gedruckt würde."
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Colours of the model"
+msgstr "Farben des Modells"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Slot %d"
+msgstr "Slot %d"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "The filament colour this region will be printed in"
+msgstr "Die Filamentfarbe, in der dieser Bereich gedruckt wird"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "%d triangles, %.1f%%"
+msgstr "%d Dreiecke, %.1f %%"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "How it would come out"
+msgstr "So würde es aussehen"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "Also take the model's colours over into the printer's filament slots"
+msgstr ""
+"Die Farben des Modells auch in die Filament-Slots des Druckers übernehmen"
+
+#: src/slic3r/GUI/ColorAssignDialog.cpp
+msgid "A slot whose colour you changed above keeps your colour."
+msgstr "Ein Slot, dessen Farbe Sie oben geändert haben, behält Ihre Farbe."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"%s is set up for %d filaments, and this printer holds one. Everything is printed with filament 1; the file itself is not changed."
+msgstr ""
+"%s ist für %d Filamente eingerichtet, und dieser Drucker fasst eines. Alles wird mit Filament 1 gedruckt; die Datei selbst bleibt unverändert."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"This file was made for the same printer with a different nozzle: the file says %s mm, your preset says %s mm."
+msgstr ""
+"Diese Datei wurde für denselben Drucker mit einer anderen Düse erstellt: Die Datei nennt %s mm, Ihr Profil %s mm."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "This file was made for %s."
+msgstr "Diese Datei wurde für %s erstellt."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"Opening it as a project replaces your printer preset %s, and with it the nozzle diameter and the process settings. Importing the geometry only keeps yours."
+msgstr ""
+"Wenn Sie die Datei als Projekt öffnen, ersetzt sie Ihr Druckerprofil %s und damit den Düsendurchmesser und die Prozesseinstellungen. Wenn Sie nur die Geometrie importieren, bleiben Ihre erhalten."
+
+#: src/libslic3r/PrintConfig.cpp
+msgid "Filament slots"
+msgstr "Filament-Slots"
+
+#: src/libslic3r/PrintConfig.cpp
+msgid ""
+"How many filaments the material changer holds at once, for example 5 for an MMU3. A 3MF imported as geometry only that uses more filaments asks which of these slots each of its colours goes to. 0 means not stated: the filament list then grows to whatever the model uses."
+msgstr ""
+"Wie viele Filamente der Materialwechsler gleichzeitig fasst, zum Beispiel 5 bei einer MMU3. Verwendet eine nur als Geometrie importierte 3MF mehr Filamente, wird gefragt, auf welchen dieser Slots jede ihrer Farben kommt. 0 heißt nicht angegeben: Die Filamentliste wächst dann auf so viele Filamente, wie das Modell verwendet."
