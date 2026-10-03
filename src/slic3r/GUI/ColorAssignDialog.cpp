@@ -273,6 +273,17 @@ ColorAssignDialog::ColorAssignDialog(wxWindow                                *pa
     // note on paint_swatches() in the header.
     paint_swatches();
     refresh_preview();
+
+    // MakerBot / UltiMaker Fork: start on the first assignment, the question
+    // this dialog asks. Left alone, wx gives the focus to the first control in
+    // tab order -- the first slot's "Change" button (seen on 2026-09-30),
+    // where Space opens a colour picker. Deferred until the dialog is on
+    // screen: a control that is not shown yet may not keep the focus.
+    if (! m_targets.empty())
+        CallAfter([this]() {
+            if (! m_targets.empty() && m_targets.front() != nullptr)
+                m_targets.front()->SetFocus();
+        });
 }
 
 void ColorAssignDialog::paint_slot_echo()
