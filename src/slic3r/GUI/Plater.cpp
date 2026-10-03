@@ -7261,6 +7261,16 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 // drawing the gradient over the new colour.
                                 const std::vector<std::string> final_colours = assign.final_slot_colours();
 
+                                // MakerBot / UltiMaker Fork: set_num_filaments()
+                                // below copies every slot's plain colour over its
+                                // multi colour list ("Sync filament multi colour"
+                                // in PresetBundle::set_num_filaments()), whatever
+                                // the slot is. What the slots had is kept here, so
+                                // that a slot the dialog leaves alone gets it back.
+                                std::vector<std::string> multi_before;
+                                if (const auto *multi = wxGetApp().preset_bundle->project_config.option<ConfigOptionStrings>("filament_multi_colour"))
+                                    multi_before = multi->values;
+
                                 // The list only ever grew. A slot the machine
                                 // does not have survives every import once it
                                 // exists, so it is taken away here.
@@ -7311,20 +7321,47 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                     auto *opt_colour = cfg.option<ConfigOptionStrings>("filament_colour");
                                     auto *opt_multi  = cfg.option<ConfigOptionStrings>("filament_multi_colour");
                                     auto *opt_type   = cfg.option<ConfigOptionStrings>("filament_colour_type");
+                                    // MakerBot / UltiMaker Fork: a slot keeps what it
+                                    // has unless its colour changes. Writing all three
+                                    // keys for every slot turned a multi colour or
+                                    // gradient filament the dialog had not touched into
+                                    // a plain colour. A slot the import adds (index kept
+                                    // and above) is always written: its entries are
+                                    // whatever set_num_filaments() padded in. A slot
+                                    // left alone gets back the multi colour list it had
+                                    // before set_num_filaments() above flattened it.
+                                    std::string rewritten;
                                     for (size_t s = 0; s < final_colours.size(); ++s) {
                                         if (final_colours[s].empty())
                                             continue;
+                                        const bool is_new = int(s) >= kept;
+                                        const bool same   = opt_colour != nullptr && s < opt_colour->values.size() &&
+                                                            boost::iequals(opt_colour->values[s], final_colours[s]);
+                                        if (! is_new && same) {
+                                            if (opt_multi != nullptr && s < opt_multi->values.size() && s < multi_before.size())
+                                                opt_multi->values[s] = multi_before[s];
+                                            continue;
+                                        }
+                                        bool wrote = false;
                                         if (opt_colour != nullptr && s < opt_colour->values.size()) {
-                                            if (flush_recoloured && int(s) < kept &&
-                                                ! boost::iequals(opt_colour->values[s], final_colours[s]))
+                                            if (flush_recoloured && ! is_new)
                                                 flush_again.push_back(int(s));
                                             opt_colour->values[s] = final_colours[s];
+                                            wrote = true;
                                         }
-                                        if (opt_multi != nullptr && s < opt_multi->values.size())
+                                        if (opt_multi != nullptr && s < opt_multi->values.size()) {
                                             opt_multi->values[s] = final_colours[s];
-                                        if (opt_type != nullptr && s < opt_type->values.size())
+                                            wrote = true;
+                                        }
+                                        if (opt_type != nullptr && s < opt_type->values.size()) {
                                             opt_type->values[s] = "1"; // one colour, no gradient
+                                            wrote = true;
+                                        }
+                                        if (wrote)
+                                            rewritten += " " + std::to_string(s + 1);
                                     }
+                                    BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": slot colours rewritten:"
+                                                            << (rewritten.empty() ? std::string(" none") : rewritten);
                                 }
 
                                 wxGetApp().plater()->on_filament_count_change(size_t(target));
@@ -13473,12 +13510,18 @@ int Plater::new_project(bool skip_confirm, bool silent, const wxString& project_
 
 LoadType determine_load_type(std::string filename, std::string override_setting = "",
                              const ThreeMfPrinterOrigin &origin       = ThreeMfPrinterOrigin(),
-                             PrinterOriginMatch          origin_match = PrinterOriginMatch::NotStated);
+                             PrinterOriginMatch          origin_match = PrinterOriginMatch::NotStated,
+                             const wxString             &title        = wxEmptyString);
 
 // MakerBot / UltiMaker Fork: how a 3MF should be opened, decided with the file's
 // own printer in hand. Defined next to open_3mf_file(), declared here because
 // load_project() sits earlier in the file and asks the same question.
-static LoadType decide_3mf_load_type(const boost::filesystem::path &file_path, bool plate_is_empty);
+//
+// title names the question after the way the user came. Empty keeps
+// upstream's "Drop project file", written for dropping a file -- dragging a
+// file and File -> Import (both through open_3mf_file()) still show it.
+static LoadType decide_3mf_load_type(const boost::filesystem::path &file_path, bool plate_is_empty,
+                                     const wxString &title = wxEmptyString);
 
 // BBS: FIXME, missing resotre logic
 void Plater::load_project(wxString const& filename2,
@@ -13552,7 +13595,10 @@ void Plater::load_project(wxString const& filename2,
         // The model is still intact at this point. close_with_confirm() only
         // asks about saving; reset() happens further down. So "the plate is
         // not empty" still means what it says here.
-        switch (decide_3mf_load_type(path, model().objects.empty())) {
+        // The title says where the user came from: Ctrl+O, the recent lists
+        // and the Home tab all end here, and "Drop project file" -- upstream's
+        // title, written for drag and drop -- named none of them.
+        switch (decide_3mf_load_type(path, model().objects.empty(), _L("Open Project"))) {
             case LoadType::OpenProject: break; // Do nothing
             case LoadType::LoadGeometry:
                 strategy      = LoadStrategy::LoadModel;
@@ -15627,7 +15673,7 @@ private:
 
 public:
     ProjectDropDialog(const std::string &filename, const ThreeMfPrinterOrigin &origin,
-                      PrinterOriginMatch origin_match);
+                      PrinterOriginMatch origin_match, const wxString &title);
 
     wxPanel *     m_top_line;
     wxStaticText *m_fname_title;
@@ -15650,10 +15696,10 @@ protected:
 };
 
 ProjectDropDialog::ProjectDropDialog(const std::string &filename, const ThreeMfPrinterOrigin &origin,
-                                     PrinterOriginMatch origin_match)
+                                     PrinterOriginMatch origin_match, const wxString &title)
     : DPIDialog(static_cast<wxWindow *>(wxGetApp().mainframe),
                 wxID_ANY,
-                from_u8((boost::format(_utf8(L("Drop project file")))).str()),
+                title.empty() ? from_u8((boost::format(_utf8(L("Drop project file")))).str()) : title,
                 wxDefaultPosition,
                 wxDefaultSize,
                 wxCAPTION | wxCLOSE_BOX)
@@ -16050,7 +16096,7 @@ static PrinterOriginMatch compare_printer_origin(const ThreeMfPrinterOrigin &ori
 }
 
 LoadType determine_load_type(std::string filename, std::string override_setting, const ThreeMfPrinterOrigin &origin,
-                             PrinterOriginMatch origin_match)
+                             PrinterOriginMatch origin_match, const wxString &title)
 {
     std::string setting;
 
@@ -16063,7 +16109,7 @@ LoadType determine_load_type(std::string filename, std::string override_setting,
     if (setting == OPTION_PROJECT_LOAD_BEHAVIOUR_LOAD_GEOMETRY) {
         return LoadType::LoadGeometry;
     } else if (setting == OPTION_PROJECT_LOAD_BEHAVIOUR_ALWAYS_ASK) {
-        ProjectDropDialog dlg(filename, origin, origin_match);
+        ProjectDropDialog dlg(filename, origin, origin_match, title);
         if (dlg.ShowModal() == wxID_OK) {
             int      choice    = dlg.get_action();
             LoadType load_type = static_cast<LoadType>(choice);
@@ -16091,7 +16137,7 @@ LoadType determine_load_type(std::string filename, std::string override_setting,
 //
 // plate_is_empty is passed in rather than read from the model, because the two
 // callers stand at different points in the work and each knows its own answer.
-static LoadType decide_3mf_load_type(const fs::path &file_path, bool plate_is_empty)
+static LoadType decide_3mf_load_type(const fs::path &file_path, bool plate_is_empty, const wxString &title)
 {
     const std::string filename = encode_path(file_path.filename().string().c_str());
 
@@ -16122,7 +16168,7 @@ static LoadType decide_3mf_load_type(const fs::path &file_path, bool plate_is_em
                                (ask_is_relevant && ask_when_relevant) ?
                                    OPTION_PROJECT_LOAD_BEHAVIOUR_ALWAYS_ASK :
                                    "",
-                               origin, origin_match);
+                               origin, origin_match, title);
 }
 
 bool Plater::open_3mf_file(const fs::path &file_path)

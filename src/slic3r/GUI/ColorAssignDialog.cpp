@@ -401,6 +401,34 @@ void ColorAssignDialog::refresh_preview()
     if (volumes.volumes.empty())
         return;
 
+    // MakerBot / UltiMaker Fork: a part that is not painted prints as a whole
+    // in the filament of its volume. render_thumbnail() takes the colours
+    // above for painted volumes only (GLVolume::simple_render()) and draws
+    // every other part in the GLVolume's own colour -- for a model part that
+    // is ColorRGBA's default, white (color_from_model_volume()). A file whose
+    // colours sit on separate parts therefore showed a white model, whatever
+    // was chosen. The whole-part colour is put on here, from the same list,
+    // so that the picture and the rows still cannot disagree.
+    int whole_parts = 0;
+    for (GLVolume *vol : volumes.volumes) {
+        const int o = vol->object_idx();
+        const int v = vol->volume_idx();
+        if (o < 0 || size_t(o) >= objects.size() || objects[size_t(o)] == nullptr)
+            continue;
+        if (v < 0 || size_t(v) >= objects[size_t(o)]->volumes.size())
+            continue;
+        const ModelVolume *mv = objects[size_t(o)]->volumes[size_t(v)];
+        if (mv == nullptr || ! mv->is_model_part() || ! mv->mmu_segmentation_facets.empty())
+            continue;
+        const int e = mv->extruder_id();
+        if (e >= 1 && size_t(e) <= colours.size()) {
+            vol->set_color(colours[size_t(e - 1)]);
+            ++whole_parts;
+        }
+    }
+    BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": " << volumes.volumes.size() << " volumes, "
+                            << whole_parts << " drawn whole in their slot colour";
+
     ThumbnailData    data;
     ThumbnailsParams params = {{}, false, true, false, true, 0, false};
     canvas->render_thumbnail(data, colours, PartPlate::plate_thumbnail_width,
