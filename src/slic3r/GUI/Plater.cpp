@@ -14808,8 +14808,11 @@ void Plater::calib_z_offset(const Calib_Params& params)
     while (n > 3 && (n - 1) * pitch + tile + 2.0 * margin > bed_w)
         --n;
     if ((n - 1) * pitch + tile + 2.0 * margin > bed_w) {
+        // The notification manager takes UTF-8. ToStdString() converts with
+        // the C library's locale instead -- on Windows the ANSI code page --
+        // and would garble a translation with umlauts.
         get_notification_manager()->push_notification(
-            _L("Z offset calibration: the printer's bed is too small for this test.").ToStdString());
+            _u8L("Z offset calibration: the printer's bed is too small for this test."));
         return;
     }
 
@@ -14833,7 +14836,7 @@ void Plater::calib_z_offset(const Calib_Params& params)
     }
     if (model().objects.empty()) {
         get_notification_manager()->push_notification(
-            _L("Z offset calibration: could not build the test model.").ToStdString());
+            _u8L("Z offset calibration: could not build the test model."));
         return;
     }
 
@@ -14867,12 +14870,12 @@ void Plater::calib_z_offset(const Calib_Params& params)
 
     // Layout description (position-based, no marks on the tiles).
     get_notification_manager()->push_notification(
-        (_L("Z offset test:") + " " + wxString::FromDouble(run.start, 3) + " - "
-         + wxString::FromDouble(run.end, 3) + " mm, "
-         + wxString::Format(_L("%d tiles."), n) + " "
-         + _L("Tile 1 (first in the row) has the smallest nozzle-to-bed gap; the gap "
-              "grows toward the last tile. Pick the smoothest tile -- its position gives "
-              "the offset.")).ToStdString());
+        into_u8(_L("Z offset test:") + " " + wxString::FromDouble(run.start, 3) + " - "
+                + wxString::FromDouble(run.end, 3) + " mm, "
+                + wxString::Format(_L("%d tiles."), n) + " "
+                + _L("Tile 1 (first in the row) has the smallest nozzle-to-bed gap; the gap "
+                     "grows toward the last tile. Pick the smoothest tile -- its position gives "
+                     "the offset.")));
 
     // set_calib_params MUST run after changed_objects (like calib_retraction):
     // set earlier it is reset by the reslice that changed_objects triggers, and
