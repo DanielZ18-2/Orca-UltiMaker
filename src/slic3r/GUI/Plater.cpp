@@ -870,6 +870,31 @@ static int fixed_material_slot_count()
     return bundle->get_printer_extruder_count();
 }
 
+// MakerBot / UltiMaker Fork: work out the flushing volumes of the given
+// filaments once the import is through. A filament added with the plus button
+// gets them from its colour (Sidebar::add_custom_filament()). One a 3MF import
+// added kept whatever the matrix held for its place -- on a machine with one
+// head the flat value PresetBundle::update_multi_material_filament_presets()
+// fills a grown matrix with -- and one it recoloured kept the volumes of its
+// old colour. On a machine with a material changer that is purge guessed, not
+// worked out.
+//
+// Deferred, because the import is still running when the list grows:
+// Sidebar::auto_calc_flushing_volumes() updates the plater and schedules the
+// background process, and the model is not on the plate yet.
+static void calc_flushing_volumes_after_import(std::vector<int> filaments)
+{
+    if (filaments.empty())
+        return;
+    wxGetApp().CallAfter([filaments]() {
+        Plater *plater = wxGetApp().plater();
+        if (plater == nullptr)
+            return;
+        for (int filament : filaments)
+            plater->sidebar().auto_calc_flushing_volumes(filament);
+    });
+}
+
 // MakerBot / UltiMaker Fork: which of the printer's filament slots each of the
 // model's colours should go to. The answer is a proposal; every row of it can
 // be changed in the dialog.
@@ -7269,6 +7294,18 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                     wxGetApp().plater()->on_filament_count_change(size_t(n));
                                 }
 
+                                // MakerBot / UltiMaker Fork: the filaments whose
+                                // flushing volumes are worked out afresh -- every
+                                // new one, as with the plus button, and every one
+                                // whose colour changes below, as with a colour
+                                // picked in the sidebar (on_filament_color_changed()
+                                // honours the same setting).
+                                std::vector<int> flush_again;
+                                for (int n = kept + 1; n <= target; ++n)
+                                    flush_again.push_back(n - 1);
+                                const bool flush_recoloured =
+                                    wxGetApp().app_config->get("auto_calculate_flush") != "disabled";
+
                                 {
                                     DynamicPrintConfig &cfg = wxGetApp().preset_bundle->project_config;
                                     auto *opt_colour = cfg.option<ConfigOptionStrings>("filament_colour");
@@ -7277,8 +7314,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                     for (size_t s = 0; s < final_colours.size(); ++s) {
                                         if (final_colours[s].empty())
                                             continue;
-                                        if (opt_colour != nullptr && s < opt_colour->values.size())
+                                        if (opt_colour != nullptr && s < opt_colour->values.size()) {
+                                            if (flush_recoloured && int(s) < kept &&
+                                                ! boost::iequals(opt_colour->values[s], final_colours[s]))
+                                                flush_again.push_back(int(s));
                                             opt_colour->values[s] = final_colours[s];
+                                        }
                                         if (opt_multi != nullptr && s < opt_multi->values.size())
                                             opt_multi->values[s] = final_colours[s];
                                         if (opt_type != nullptr && s < opt_type->values.size())
@@ -7305,6 +7346,8 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 for (PlaterPresetComboBox *combo : sidebar->combos_filament())
                                     if (combo != nullptr)
                                         combo->update();
+
+                                calc_flushing_volumes_after_import(flush_again);
 
                                 // What the user actually settled on, so that the
                                 // log answers "proposal or choice?" without a
@@ -7339,14 +7382,20 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         }
 
                         int filament_size = sidebar->combos_filament().size();
+                        // MakerBot / UltiMaker Fork: what this loop adds gets
+                        // its flushing volumes from its colour, as a filament
+                        // added with the plus button does.
+                        std::vector<int> grown;
                         while (filament_size < MAXIMUM_EXTRUDER_NUMBER && filament_size < size) {
                             int         filament_count = filament_size + 1;
                             wxColour    new_col        = Plater::get_next_color_for_filament();
                             std::string new_color      = new_col.GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
                             wxGetApp().preset_bundle->set_num_filaments(filament_count, new_color);
                             wxGetApp().plater()->on_filament_count_change(filament_count);
+                            grown.push_back(filament_size);
                             ++filament_size;
                         }
+                        calc_flushing_volumes_after_import(grown);
                         wxGetApp().get_tab(Preset::TYPE_PRINT)->update();
                     }
 
