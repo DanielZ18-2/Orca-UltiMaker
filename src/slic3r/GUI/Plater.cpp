@@ -305,7 +305,7 @@ static std::string config_string_if_present(const DynamicPrintConfig& cfg, const
 static std::string smart_extruder_identity_from_config(const DynamicPrintConfig& cfg)
 {
     std::string identity;
-    for (const std::string& key : {"printer_model", "model_id", "printer_notes", "printer_vendor"}) {
+    for (const char *key : {"printer_model", "model_id", "printer_notes", "printer_vendor"}) {
         const std::string value = config_string_if_present(cfg, key);
         if (!value.empty()) {
             if (!identity.empty()) identity += " ";
