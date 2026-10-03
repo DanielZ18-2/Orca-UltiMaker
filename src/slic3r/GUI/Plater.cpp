@@ -13531,6 +13531,10 @@ void Plater::load_project(wxString const& filename2,
     auto path     = into_path(filename);
 
     auto strategy = LoadStrategy::LoadModel | LoadStrategy::LoadConfig;
+    // MakerBot / UltiMaker Fork: true when the question below is answered
+    // with "Import geometry only". See where the project is named, further
+    // down.
+    bool geometry_only = false;
     if (originfile == "<silence>") {
         strategy = strategy | LoadStrategy::Silence;
     } else if (originfile == "<loadall>") {
@@ -13550,7 +13554,10 @@ void Plater::load_project(wxString const& filename2,
         // not empty" still means what it says here.
         switch (decide_3mf_load_type(path, model().objects.empty())) {
             case LoadType::OpenProject: break; // Do nothing
-            case LoadType::LoadGeometry:; strategy = LoadStrategy::LoadModel; break;
+            case LoadType::LoadGeometry:
+                strategy      = LoadStrategy::LoadModel;
+                geometry_only = true;
+                break;
             default:
                 // The user cancelled.
                 //
@@ -13583,7 +13590,24 @@ void Plater::load_project(wxString const& filename2,
     wxGetApp().preset_bundle->export_selections(*wxGetApp().app_config);
 
     // if res is empty no data has been loaded
-    if (!res.empty() && (load_restore || !(strategy & LoadStrategy::Silence))) {
+    if (!res.empty() && geometry_only) {
+        // MakerBot / UltiMaker Fork: "Import geometry only" takes the model out
+        // of the file and nothing else, so the file does not become the
+        // project. Adopted as the project file, as in the branch below, it was
+        // where Save wrote: the user's printer and process went into the 3MF
+        // the model came from -- a file made for another printer, quite
+        // possibly the user's own project for it. Upstream reaches this way
+        // only with "Always ask". Since decide_3mf_load_type() asks here too,
+        // the default "Ask when relevant" reaches it whenever the plate is
+        // not empty or the file was made for another printer.
+        //
+        // The plate is named after the file, as an imported STL is, and the
+        // project folder stays empty (reset() above cleared it), so Save asks
+        // where to write.
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << __LINE__
+                                << " geometry only, the file is not adopted as the project: " << filename;
+        p->set_project_name(from_path(path.stem()));
+    } else if (!res.empty() && (load_restore || !(strategy & LoadStrategy::Silence))) {
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << __LINE__ << " call set_project_filename: " << (load_restore ? originfile : filename);
         p->set_project_filename(load_restore ? originfile : filename);
         if (load_restore && originfile.IsEmpty()) {
