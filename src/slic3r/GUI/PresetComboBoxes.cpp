@@ -1120,6 +1120,13 @@ void PlaterPresetComboBox::update()
         std::vector<wxBitmap *> bitmaps = get_extruder_color_icons(true);
         if (m_filament_idx < bitmaps.size()) {
             clr_picker->SetBitmap(*bitmaps[m_filament_idx]);
+            // MakerBot / UltiMaker Fork: name the nozzle that prints this
+            // filament, where the machine names one -- see
+            // filament_nozzle_name(). Set on every update: the printer may
+            // have changed since the last one.
+            const wxString nozzle = filament_nozzle_name(m_filament_idx + 1);
+            clr_picker->SetToolTip(nozzle.empty() ? _L("Click to select filament color") :
+                                                    nozzle + "\n" + _L("Click to select filament color"));
         } else {
             return;
         }

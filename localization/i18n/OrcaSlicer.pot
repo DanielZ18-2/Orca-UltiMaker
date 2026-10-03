@@ -21086,3 +21086,11 @@ msgstr ""
 msgid ""
 "Each patch is printed at a different commanded layer height and is labeled with a printed flag showing that height. Pick the patch with the cleanest first layer, then change the printer's Z offset by (patch height - first layer height)."
 msgstr ""
+
+#: src/slic3r/GUI/wxExtensions.cpp
+msgid "Filament %d: right nozzle (A)"
+msgstr ""
+
+#: src/slic3r/GUI/wxExtensions.cpp
+msgid "Filament %d: left nozzle (B)"
+msgstr ""

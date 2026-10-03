@@ -22478,3 +22478,11 @@ msgstr "Keine Heizung ausgewählt."
 #: src/slic3r/GUI/PhysicalPrinterDialog.cpp
 msgid "Connected"
 msgstr "Verbunden"
+
+#: src/slic3r/GUI/wxExtensions.cpp
+msgid "Filament %d: right nozzle (A)"
+msgstr "Filament %d: rechte Düse (A)"
+
+#: src/slic3r/GUI/wxExtensions.cpp
+msgid "Filament %d: left nozzle (B)"
+msgstr "Filament %d: linke Düse (B)"

@@ -535,6 +535,52 @@ wxBitmap* get_default_extruder_color_icon(bool thin_icon/* = false*/)
     return bitmap;
 }
 
+// MakerBot / UltiMaker Fork: which nozzle prints a filament, on a machine
+// that names its nozzles. On a two head MakerBot of the legacy line -- the
+// Replicator 2X and the Replicator (Original) Dual, gcode_flavor
+// makerbot_legacy -- filament 1 goes to tool 0, the RIGHT nozzle on axis A,
+// and filament 2 to tool 1, the LEFT one on axis B. That is MakerBot's own
+// numbering, and GPX and the firmwares follow it.
+//
+// The sidebar lays the filaments out in two columns, filament 1 on the left
+// and filament 2 on the right, so the number alone pointed the wrong way: a
+// tester who wanted the right nozzle chose filament 2 and printed with the
+// left one. Returns 'R', 'L', or 0 where no nozzle is named.
+static char named_nozzle_of_filament(int filament_number)
+{
+    const Slic3r::PresetBundle *bundle = Slic3r::GUI::wxGetApp().preset_bundle;
+    if (bundle == nullptr || filament_number < 1 || filament_number > 2)
+        return 0;
+    const Slic3r::DynamicPrintConfig &cfg = bundle->printers.get_edited_preset().config;
+    const auto *flavor  = cfg.option<Slic3r::ConfigOptionEnum<Slic3r::GCodeFlavor>>("gcode_flavor");
+    const auto *nozzles = cfg.option<Slic3r::ConfigOptionFloats>("nozzle_diameter");
+    if (flavor == nullptr || flavor->value != Slic3r::gcfMakerBotLegacy || nozzles == nullptr ||
+        nozzles->values.size() != 2)
+        return 0;
+    return filament_number == 1 ? 'R' : 'L';
+}
+
+// MakerBot / UltiMaker Fork: the text on a filament's colour icon -- its
+// number, followed by R or L where the nozzle is named, see above.
+std::string filament_icon_label(int filament_number)
+{
+    std::string label = std::to_string(filament_number);
+    if (const char nozzle = named_nozzle_of_filament(filament_number))
+        label += nozzle;
+    return label;
+}
+
+// MakerBot / UltiMaker Fork: the same in words, for a tool tip. Empty where
+// the machine names no nozzle.
+wxString filament_nozzle_name(int filament_number)
+{
+    switch (named_nozzle_of_filament(filament_number)) {
+    case 'R': return wxString::Format(_L("Filament %d: right nozzle (A)"), filament_number);
+    case 'L': return wxString::Format(_L("Filament %d: left nozzle (B)"), filament_number);
+    default: return wxString();
+    }
+}
+
 std::vector<wxBitmap*> get_extruder_color_icons(bool thin_icon/* = false*/)
 {
     // Create the bitmap with color bars.
@@ -554,7 +600,7 @@ std::vector<wxBitmap*> get_extruder_color_icons(bool thin_icon/* = false*/)
 
         int index = 0;
         for (const auto &colors : readable_color_info) {
-            auto label = std::to_string(++index);
+            auto label = filament_icon_label(++index);
             bool is_gradient = ctype[index-1] == "0";
             if (colors.size() == 1) {
                 bmps.push_back(get_extruder_color_icon(colors[0], label, icon_width, icon_height));
@@ -571,7 +617,7 @@ std::vector<wxBitmap*> get_extruder_color_icons(bool thin_icon/* = false*/)
         const int    icon_height = lround(2 * em);
         int index = 0;
         for (const auto &color : colors) {
-            auto label = std::to_string(++index);
+            auto label = filament_icon_label(++index);
             bmps.push_back(get_extruder_color_icon(color, label, icon_width, icon_height));
         }
     }
