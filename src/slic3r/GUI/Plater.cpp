@@ -934,6 +934,20 @@ static void calc_flushing_volumes_after_import(std::vector<int> filaments)
     });
 }
 
+// MakerBot / UltiMaker Fork: whether a colour is readable -- six hex digits,
+// as a 3MF writes one. hex_colour_to_lab() answers black for most colours it
+// cannot read, and black is a colour like any other, so its answer alone
+// does not tell.
+static bool hex_colour_readable(const std::string &hex)
+{
+    const size_t start = (! hex.empty() && hex.front() == '#') ? 1 : 0;
+    if (hex.size() < start + 6)
+        return false;
+    return std::all_of(hex.begin() + start, hex.begin() + start + 6, [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    });
+}
+
 // MakerBot / UltiMaker Fork: which of the printer's filament slots each of the
 // model's colours should go to. The answer is a proposal; every row of it can
 // be changed in the dialog.
@@ -979,8 +993,12 @@ static void calc_flushing_volumes_after_import(std::vector<int> filaments)
 // follow.
 //
 // The returned vector is 0 based: entry i is the 1 based slot for the model's
-// filament i+1. Where a colour cannot be read it falls to slot 1, which is
-// visible in the dialog and changeable like any other row.
+// filament i+1. Where a colour cannot be read -- or the file names none, as
+// for a row the import adds -- it falls to slot 1, which is visible in the
+// dialog and changeable like any other row. Such a colour takes no part in
+// the passes above: it does not crowd a slot and does not fill a free one.
+// Most such colours used to be read as black and went wherever black would
+// have gone.
 static std::vector<int> propose_slots_for_colours(const std::vector<std::string> &model_colours,
                                                   const std::vector<std::string> &slot_colours,
                                                   int                             highest,
@@ -1010,6 +1028,12 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
 
     const int count = std::min(highest, int(model_lab.size()));
 
+    // MakerBot / UltiMaker Fork: a colour that cannot be read stays on slot 1
+    // and out of every pass below, see above.
+    std::vector<bool> readable(size_t(count), false);
+    for (int i = 0; i < count; ++i)
+        readable[size_t(i)] = hex_colour_readable(model_colours[size_t(i)]);
+
     // Every distance once. At most 64 colours against at most 16 slots. A free
     // slot stays at 0: whoever moves in brings the colour along.
     std::vector<double> dist(size_t(count) * size_t(slots), 0.0);
@@ -1036,6 +1060,10 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
 
     std::vector<int> pick(size_t(count), first_set);
     for (int i = 0; i < count; ++i) {
+        if (! readable[size_t(i)]) {
+            pick[size_t(i)] = 0; // slot 1
+            continue;
+        }
         int best = first_set;
         for (int s = first_set + 1; s < slots; ++s)
             if (! is_free[size_t(s)] && dist[at(i, s)] < dist[at(i, best)])
@@ -1059,7 +1087,8 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
     for (int round = 0; round < slots; ++round) {
         std::vector<int> load(size_t(slots), 0);
         for (int i = 0; i < count; ++i)
-            ++load[size_t(pick[size_t(i)])];
+            if (readable[size_t(i)])
+                ++load[size_t(pick[size_t(i)])];
 
         int idle = -1;
         for (int s = 0; s < slots; ++s)
@@ -1073,6 +1102,8 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
         int    mover = -1;
         double best  = 0.0;
         for (int i = 0; i < count; ++i) {
+            if (! readable[size_t(i)])
+                continue;
             const int from = pick[size_t(i)];
             if (load[size_t(from)] < 2)
                 continue; // the only colour on its slot must stay
@@ -1093,8 +1124,11 @@ static std::vector<int> propose_slots_for_colours(const std::vector<std::string>
     if (std::any_of(taken_by.begin(), taken_by.end(), [](int colour) { return colour >= 0; })) {
         std::vector<int> load(size_t(slots), 0);
         for (int i = 0; i < count; ++i)
-            ++load[size_t(pick[size_t(i)])];
+            if (readable[size_t(i)])
+                ++load[size_t(pick[size_t(i)])];
         for (int i = 0; i < count; ++i) {
+            if (! readable[size_t(i)])
+                continue;
             const int from = pick[size_t(i)];
             if (load[size_t(from)] < 2)
                 continue; // the only colour on its slot must stay
@@ -7133,12 +7167,25 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         // printer_filament_limit().
                         const int machine_slots = printer_filament_limit();
 
+                        // MakerBot / UltiMaker Fork: what is imported here is
+                        // geometry only -- either because the user said so, or
+                        // because the file comes from PrusaSlicer. Orca loads such
+                        // a file as geometry whatever the answer was (load_config
+                        // is cleared for it further down, with the message "The
+                        // 3MF is not supported by OrcaSlicer, loading geometry
+                        // data only."), and its filaments meet the same slots.
+                        // Before, a PrusaSlicer file opened on an empty plate --
+                        // where nothing asks, since it names no printer -- grew
+                        // the filament list past the machine.
+                        const bool geometry_import =
+                            load_model && (! load_config || en_3mf_file_type == En3mfType::From_Prusa);
+
                         // MakerBot / UltiMaker Fork: a machine that holds one
                         // filament leaves nothing to choose -- every row of the
                         // dialog could only say "slot 1". So there is no
                         // dialog: the model goes straight onto filament 1 and a
                         // notification says so. The file itself is not touched.
-                        if (load_model && ! load_config && machine_slots == 1 && size > 1) {
+                        if (geometry_import && machine_slots == 1 && size > 1) {
                             std::vector<int> onto_one(size_t(size) + 1, 1);
                             onto_one[0] = 0; // "the volume's own extruder" stays itself
 
@@ -7169,9 +7216,35 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             size = 1;
                         }
 
-                        if (load_model && ! load_config && machine_slots > 1 && size > machine_slots) {
+                        if (geometry_import && machine_slots > 1 && size > machine_slots) {
                             ThreeMfPrinterOrigin file_origin;
                             bbs_3mf_read_printer_origin(path.string(), file_origin);
+
+                            // MakerBot / UltiMaker Fork: a PrusaSlicer file keeps
+                            // its colours in Metadata/Slic3r_PE.config, which the
+                            // reader above does not open, see
+                            // bbs_3mf_read_prusa_colours(). And every filament
+                            // number up to the highest the model uses needs a row
+                            // of its own: rows beyond the file's colour list were
+                            // missing, OK left those numbers unmapped, and regions
+                            // above the machine's slots pointed at filaments that
+                            // do not exist. Such a row has no colour; the dialog
+                            // draws it grey and the proposal puts it on slot 1.
+                            // MAXIMUM_EXTRUDER_NUMBER bounds the rows as it bounds
+                            // the filament list, against a file that names a
+                            // filament number no printer has.
+                            std::string colour_source = "project_settings.config";
+                            if (file_origin.filament_colours.empty() && en_3mf_file_type == En3mfType::From_Prusa)
+                                colour_source = bbs_3mf_read_prusa_colours(path.string(), file_origin.filament_colours) ?
+                                                    "Slic3r_PE.config" :
+                                                    "nowhere, no readable Slic3r_PE.config";
+                            const size_t listed = file_origin.filament_colours.size();
+                            const size_t rows   = std::min(size_t(size), size_t(MAXIMUM_EXTRUDER_NUMBER));
+                            if (listed < rows)
+                                file_origin.filament_colours.resize(rows);
+                            BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": model colours from " << colour_source << ": "
+                                                    << listed << " listed, " << file_origin.filament_colours.size()
+                                                    << " rows for " << size << " filaments";
 
                             // MakerBot / UltiMaker Fork: the printer's slots.
                             // They are read FIRST, because they are the set the
@@ -7263,6 +7336,22 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 if (slots[s].colour.empty() && ! filled[s].empty()) {
                                     slots[s].colour = filled[s];
                                     free_slots += " " + std::to_string(s + 1) + "=" + filled[s];
+                                }
+
+                            // MakerBot / UltiMaker Fork: a free slot the proposal
+                            // left without a colour gets, here and not on OK, the
+                            // colour it will be added in -- the next one
+                            // get_next_color_for_filament() hands out. Before, the
+                            // dialog drew it grey, a row moved onto it by hand was
+                            // shown grey, and OK added the slot in a palette colour
+                            // nobody had seen -- or with none at all where the
+                            // machine's nozzle count had padded its preset in
+                            // already, since set_num_filaments() then takes no
+                            // colour and the empty one was not written.
+                            for (size_t s = 0; s < slots.size(); ++s)
+                                if (slots[s].free && slots[s].colour.empty()) {
+                                    slots[s].colour = Plater::get_next_color_for_filament().GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
+                                    free_slots += " " + std::to_string(s + 1) + "=" + slots[s].colour + " (palette)";
                                 }
 
                             // The whole proposal, not only the part above the
@@ -7462,11 +7551,21 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         }
 
                         int filament_size = sidebar->combos_filament().size();
+                        // MakerBot / UltiMaker Fork: never past a machine with a
+                        // known number of slots. For a geometry import the
+                        // branches above have brought size down to it already.
+                        // What still went past it was a PrusaSlicer file read
+                        // for its settings alone, with no model placed at all:
+                        // this block runs for every PrusaSlicer file.
+                        const int grow_to = machine_slots > 0 ? std::min(size, machine_slots) : size;
+                        if (grow_to < size)
+                            BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": filament list kept within the machine's "
+                                                    << machine_slots << " slots, the model asks for " << size;
                         // MakerBot / UltiMaker Fork: what this loop adds gets
                         // its flushing volumes from its colour, as a filament
                         // added with the plus button does.
                         std::vector<int> grown;
-                        while (filament_size < MAXIMUM_EXTRUDER_NUMBER && filament_size < size) {
+                        while (filament_size < MAXIMUM_EXTRUDER_NUMBER && filament_size < grow_to) {
                             int         filament_count = filament_size + 1;
                             wxColour    new_col        = Plater::get_next_color_for_filament();
                             std::string new_color      = new_col.GetAsString(wxC2S_HTML_SYNTAX).ToStdString();

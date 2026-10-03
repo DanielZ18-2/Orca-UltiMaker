@@ -9067,6 +9067,98 @@ bool bbs_3mf_read_printer_origin(const std::string& path, ThreeMfPrinterOrigin& 
     return true;
 }
 
+// MakerBot / UltiMaker Fork: see bbs_3mf.hpp. The member is looked for the way
+// bbs_3mf_read_printer_origin() looks for the project config, by walking the
+// archive directory case insensitive, and taken out by the index it was found
+// at. It is read the way PrusaSlicer writes it: one "; key = value" comment
+// line per setting, a list in the form ConfigOptionStrings serializes it
+// ("#E53935;#43A047", and "" or nothing for an empty entry). Only the two
+// colour keys are looked at; nothing else in the file is parsed or applied.
+bool bbs_3mf_read_prusa_colours(const std::string& path, std::vector<std::string>& colours)
+{
+    colours.clear();
+
+    // The archive helpers are shared with the importer, which runs under the
+    // "C" locale.
+    CNumericLocalesSetter locales_setter;
+
+    mz_zip_archive archive;
+    mz_zip_zero_struct(&archive);
+
+    struct close_lock
+    {
+        mz_zip_archive* archive;
+        ~close_lock() { if (archive != nullptr) close_zip_reader(archive); }
+    } lock{&archive};
+
+    if (!open_zip_reader(&archive, path))
+        return false;
+
+    const std::string        prusa_config = "Metadata/Slic3r_PE.config";
+    mz_uint                  num_entries  = mz_zip_reader_get_num_files(&archive);
+    mz_zip_archive_file_stat stat;
+    mz_uint                  index = num_entries;
+    for (mz_uint i = 0; i < num_entries; ++i) {
+        if (!mz_zip_reader_file_stat(&archive, i, &stat))
+            continue;
+        std::string name(stat.m_filename);
+        std::replace(name.begin(), name.end(), '\\', '/');
+        if (boost::algorithm::iequals(name, prusa_config)) {
+            index = i;
+            break;
+        }
+    }
+    if (index == num_entries)
+        return false;
+    if (stat.m_uncomp_size == 0)
+        return true;
+
+    std::string buffer((size_t) stat.m_uncomp_size, 0);
+    if (!mz_zip_reader_extract_to_mem(&archive, index, (void*) buffer.data(), (size_t) stat.m_uncomp_size, 0))
+        return false;
+
+    auto trimmed = [](const std::string& s) {
+        const size_t first = s.find_first_not_of(" \t\r");
+        if (first == std::string::npos)
+            return std::string();
+        return s.substr(first, s.find_last_not_of(" \t\r") - first + 1);
+    };
+
+    std::vector<std::string> filament;
+    std::vector<std::string> extruder;
+    size_t                   start = 0;
+    while (start < buffer.size()) {
+        size_t end = buffer.find('\n', start);
+        if (end == std::string::npos)
+            end = buffer.size();
+        const std::string line = buffer.substr(start, end - start);
+        start                  = end + 1;
+
+        const size_t equals = line.find('=');
+        if (line.empty() || line.front() != ';' || equals == std::string::npos)
+            continue;
+        const std::string key = trimmed(line.substr(1, equals - 1));
+        std::vector<std::string>* target = key == "filament_colour" ? &filament :
+                                           key == "extruder_colour" ? &extruder :
+                                                                      nullptr;
+        if (target == nullptr)
+            continue;
+        // Should a key appear twice, its last line counts.
+        target->clear();
+        if (!unescape_strings_cstyle(trimmed(line.substr(equals + 1)), *target))
+            target->clear();
+    }
+
+    colours.assign(std::max(filament.size(), extruder.size()), std::string());
+    for (size_t i = 0; i < colours.size(); ++i) {
+        if (i < extruder.size() && !extruder[i].empty())
+            colours[i] = extruder[i];
+        else if (i < filament.size())
+            colours[i] = filament[i];
+    }
+    return true;
+}
+
 bool load_gcode_3mf_from_stream(std::istream &data, DynamicPrintConfig *config, Model *model, PlateDataPtrs *plate_data_list, Semver *file_version)
 {
     CNumericLocalesSetter locales_setter;

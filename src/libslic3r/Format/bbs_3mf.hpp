@@ -291,6 +291,21 @@ struct ThreeMfPrinterOrigin
 // the project config is not readable JSON. origin is cleared in every case.
 extern bool bbs_3mf_read_printer_origin(const std::string& path, ThreeMfPrinterOrigin& origin);
 
+// MakerBot / UltiMaker Fork: the colours a PrusaSlicer 3MF gives its
+// filaments. They sit in Metadata/Slic3r_PE.config and nowhere else: such a
+// file has no project_settings.config for the reader above, and Orca's
+// PrusaSlicer importer, load_3mf() in 3mf.cpp, takes the model and its object
+// settings out of the archive but not this member -- its extraction is
+// commented out there. So the config a load hands back does not know them
+// either.
+//
+// PrusaSlicer draws an extruder in its extruder_colour where one is set and
+// in its filament_colour otherwise; the same rule picks the colour here. An
+// entry neither key names stays empty. Returns false when the file cannot be
+// opened, carries no Slic3r_PE.config or that member cannot be extracted;
+// colours is cleared in every case.
+extern bool bbs_3mf_read_prusa_colours(const std::string& path, std::vector<std::string>& colours);
+
 
 //BBS: add plate data list related logic
 // add backup logic

@@ -534,8 +534,12 @@ std::vector<std::string> ColorAssignDialog::final_slot_colours() const
     for (size_t s = 0; s < out.size(); ++s) {
         if (s < m_slot_edited.size() && m_slot_edited[s])
             continue; // hand beats file
+        // MakerBot / UltiMaker Fork: a row without a colour has none to
+        // give -- the import adds such rows for filament numbers the file
+        // names no colour for. The next row on the slot that has one gives
+        // it instead.
         for (size_t i = 1; i < map.size(); ++i)
-            if (map[i] == int(s + 1) && i - 1 < m_model_colours.size()) {
+            if (map[i] == int(s + 1) && i - 1 < m_model_colours.size() && ! m_model_colours[i - 1].empty()) {
                 out[s] = m_model_colours[i - 1];
                 break; // two colours on one slot: the first one gets it
             }
