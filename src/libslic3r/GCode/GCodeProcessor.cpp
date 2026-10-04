@@ -5137,8 +5137,12 @@ void GCodeProcessor::process_M135(const GCodeReader::GCodeLine& line)
 {
     // These M-codes are used by MakerWare to change active tool.
     // They have to be processed otherwise toolchanges will be unrecognised
-
-    if (m_flavor != gcfMakerWare)
+    //
+    // MakerBot / UltiMaker Fork: G-code for the Replicator line
+    // (makerbot_legacy, made into .x3g by GPX) changes tools with M135 too.
+    // Its start G-code primes each nozzle the print uses after an "M135 Tn".
+    // Ignored here, the preview drew every prime line for the first filament.
+    if (m_flavor != gcfMakerWare && m_flavor != gcfMakerBotLegacy)
         return;
 
     std::string cmd = line.raw();
