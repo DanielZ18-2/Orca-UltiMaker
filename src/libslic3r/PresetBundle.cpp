@@ -5594,10 +5594,53 @@ void PresetBundle::normalize_compatible_presets()
     normalize(this->sla_materials, &this->sla_prints);
 }
 
+// MakerBot / UltiMaker Fork: is this printer one of the fork's own machines?
+// Decided by its model, as in Plater.cpp and Tab.cpp, which carry twins of
+// this function -- not by the preset name, which can be anything.
+static bool printer_model_is_makerbot_or_ultimaker(const PresetBundle &bundle, const DynamicPrintConfig &printer_config)
+{
+    const ConfigOptionString *model = printer_config.option<ConfigOptionString>("printer_model");
+    if (model == nullptr || model->value.empty())
+        return false;
+    for (const char *vendor_id : {"MakerBot", "UltiMaker"}) {
+        const auto vendor = bundle.vendors.find(vendor_id);
+        if (vendor == bundle.vendors.end())
+            continue;
+        for (const VendorProfile::PrinterModel &m : vendor->second.models)
+            if (m.name == model->value)
+                return true;
+    }
+    return false;
+}
+
 void PresetBundle::update_compatible(PresetSelectCompatibleType select_other_print_if_incompatible, PresetSelectCompatibleType select_other_filament_if_incompatible)
 {
     const Preset					&printer_preset					    = this->printers.get_edited_preset();
 	const PresetWithVendorProfile    printer_preset_with_vendor_profile = this->printers.get_preset_with_vendor_profile(printer_preset);
+
+    // MakerBot / UltiMaker Fork: when the printer changes, Orca keeps the
+    // material. A filament with the alias of the one selected before wins
+    // outright, and one of its type outranks the printer's own default.
+    // On one of the fork's printers that is only worth something for a
+    // filament made for the printer: a Replicator Z18 coming from a printer
+    // with PA-CF took a third-party PA-CF over its own Generic PLA. So there,
+    // a filament that does not name the printer in compatible_printers --
+    // every MakerBot and UltiMaker filament does, and a user preset derived
+    // from one inherits the list -- carries nothing over, and the printer's
+    // default wins. Empty for every other printer: nothing changes there.
+    std::function<bool(const Preset &)> may_carry_over;
+    if (printer_model_is_makerbot_or_ultimaker(*this, printer_preset.config)) {
+        const Preset *printer_base = this->printers.get_preset_base(printer_preset);
+        may_carry_over = [&printer_preset, printer_base](const Preset &filament) {
+            const ConfigOptionStrings *listed = filament.config.option<ConfigOptionStrings>("compatible_printers");
+            if (listed == nullptr)
+                return false;
+            auto names = [listed](const std::string &name) {
+                return std::find(listed->values.begin(), listed->values.end(), name) != listed->values.end();
+            };
+            return names(printer_preset.name) || (printer_base != nullptr && names(printer_base->name));
+        };
+    }
 
     class PreferedProfileMatch
     {
@@ -5654,21 +5697,27 @@ void PresetBundle::update_compatible(PresetSelectCompatibleType select_other_pri
     class PreferedFilamentProfileMatch : public PreferedProfileMatch
     {
     public:
-        PreferedFilamentProfileMatch(const Preset *preset, const std::string &prefered_name) :
+        PreferedFilamentProfileMatch(const Preset *preset, const std::string &prefered_name, const std::function<bool(const Preset &)> &may_carry_over) :
             PreferedProfileMatch(preset ? preset->alias : std::string(), prefered_name),
-            m_prefered_filament_type(preset ? preset->config.opt_string("filament_type", 0) : std::string()) {}
+            m_prefered_filament_type(preset ? preset->config.opt_string("filament_type", 0) : std::string()),
+            m_default_name(prefered_name),
+            m_may_carry_over(may_carry_over) {}
 
         int operator()(const Preset &preset) const
         {
             // Don't match any properties of the "-- default --" profile or the external profiles when switching printer profile.
             if (preset.is_default || preset.is_external)
                 return 0;
+            // MakerBot / UltiMaker Fork: see may_carry_over above.
+            const bool carry_over = ! m_may_carry_over || m_may_carry_over(preset);
             int match_quality = PreferedProfileMatch::operator()(preset);
+            if (match_quality == std::numeric_limits<int>::max() && ! carry_over)
+                match_quality = preset.name == m_default_name;
             if (match_quality < std::numeric_limits<int>::max()) {
                 match_quality += 1;
                 if(preset.is_visible)
                     match_quality += 1;
-                if (! m_prefered_filament_type.empty() && m_prefered_filament_type == preset.config.opt_string("filament_type", 0))
+                if (carry_over && ! m_prefered_filament_type.empty() && m_prefered_filament_type == preset.config.opt_string("filament_type", 0))
                     match_quality *= 10;
             }
             return match_quality;
@@ -5676,16 +5725,19 @@ void PresetBundle::update_compatible(PresetSelectCompatibleType select_other_pri
 
     private:
         const std::string m_prefered_filament_type;
+        const std::string m_default_name;
+        const std::function<bool(const Preset &)> m_may_carry_over;
     };
 
     // Matching by the layer height in addition.
     class PreferedFilamentsProfileMatch
     {
     public:
-        PreferedFilamentsProfileMatch(const Preset *preset, const std::vector<std::string> &prefered_names) :
+        PreferedFilamentsProfileMatch(const Preset *preset, const std::vector<std::string> &prefered_names, const std::function<bool(const Preset &)> &may_carry_over) :
             m_prefered_alias(preset ? preset->alias : std::string()),
             m_prefered_filament_type(preset ? preset->config.opt_string("filament_type", 0) : std::string("PLA")), // BBS: default choose PLA
-            m_prefered_names(prefered_names)
+            m_prefered_names(prefered_names),
+            m_may_carry_over(may_carry_over)
             {}
 
         int operator()(const Preset &preset) const
@@ -5693,11 +5745,13 @@ void PresetBundle::update_compatible(PresetSelectCompatibleType select_other_pri
             // Don't match any properties of the "-- default --" profile or the external profiles when switching printer profile.
             if (preset.is_default || preset.is_external || !preset.is_visible)
                 return 0;
-            if (! m_prefered_alias.empty() && m_prefered_alias == preset.alias)
+            // MakerBot / UltiMaker Fork: see may_carry_over above.
+            const bool carry_over = ! m_may_carry_over || m_may_carry_over(preset);
+            if (carry_over && ! m_prefered_alias.empty() && m_prefered_alias == preset.alias)
                 // Matching an alias, always take this preset with priority.
                 return std::numeric_limits<int>::max();
             int match_quality = (std::find(m_prefered_names.begin(), m_prefered_names.end(), preset.name) != m_prefered_names.end()) + 1;
-            if (! m_prefered_filament_type.empty() && m_prefered_filament_type == preset.config.opt_string("filament_type", 0))
+            if (carry_over && ! m_prefered_filament_type.empty() && m_prefered_filament_type == preset.config.opt_string("filament_type", 0))
                 match_quality *= 10;
             return match_quality;
         }
@@ -5706,6 +5760,7 @@ void PresetBundle::update_compatible(PresetSelectCompatibleType select_other_pri
         const std::string               m_prefered_alias;
         const std::string               m_prefered_filament_type;
         const std::vector<std::string> &m_prefered_names;
+        const std::function<bool(const Preset &)> m_may_carry_over;
     };
 
     BOOST_LOG_TRIVIAL(info) << boost::format("update_compatibility for all presets enter, select_other_print_if_incompatible %1%, select_other_filament_if_incompatible %2%")%(int)select_other_print_if_incompatible %(int)select_other_filament_if_incompatible;
@@ -5734,7 +5789,7 @@ void PresetBundle::update_compatible(PresetSelectCompatibleType select_other_pri
             BOOST_LOG_TRIVIAL(info) << boost::format("prefered filament： %1%") % prefered_filament_profiles[idx];
         }
         this->filaments.update_compatible(printer_preset_with_vendor_profile, &print_preset_with_vendor_profile, select_other_filament_if_incompatible,
-            PreferedFilamentsProfileMatch(this->filaments.get_selected_idx() == size_t(-1) ? nullptr : &this->filaments.get_edited_preset(), prefered_filament_profiles));
+            PreferedFilamentsProfileMatch(this->filaments.get_selected_idx() == size_t(-1) ? nullptr : &this->filaments.get_edited_preset(), prefered_filament_profiles, may_carry_over));
         if (select_other_filament_if_incompatible != PresetSelectCompatibleType::Never) {
             // Verify validity of the current filament presets.
             const std::string prefered_filament_profile = prefered_filament_profiles.empty() ? std::string() : prefered_filament_profiles.front();
@@ -5750,7 +5805,8 @@ void PresetBundle::update_compatible(PresetSelectCompatibleType select_other_pri
                         // Pick a compatible profile. If there are prefered_filament_profiles, use them.
                         filament_name = this->filaments.first_compatible(
                             PreferedFilamentProfileMatch(preset,
-                                (idx < prefered_filament_profiles.size()) ? prefered_filament_profiles[idx] : prefered_filament_profile)).name;
+                                (idx < prefered_filament_profiles.size()) ? prefered_filament_profiles[idx] : prefered_filament_profile,
+                                may_carry_over)).name;
                 }
             }
         }
