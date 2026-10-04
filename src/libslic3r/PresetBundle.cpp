@@ -6066,6 +6066,43 @@ bool PresetBundle::check_duplicate_filament_subtypes() const
     return found_duplicates;
 }
 
+// MakerBot / UltiMaker Fork: a bundle_id as the id of a bundle, which names
+// its folder and is the part of its presets' names between "_local/" and the
+// preset name (get_preset_canonical_name()). It comes from a file being
+// imported: no path separators, which would also split the preset names; no
+// characters Windows refuses in file names, no name Windows reserves, no
+// trailing dot or space, at most 120 bytes. Empty where nothing is left;
+// import_presets() then makes up an id.
+static std::string bundle_folder_name(const std::string &bundle_id)
+{
+    std::string out;
+    out.reserve(bundle_id.size());
+    for (const char c : bundle_id) {
+        const unsigned char u = static_cast<unsigned char>(c);
+        const bool refused = u < 0x20 || c == '<' || c == '>' || c == ':' || c == '"' || c == '/' || c == '\\' ||
+                             c == '|' || c == '?' || c == '*';
+        out += refused ? '_' : c;
+    }
+    if (out.size() > 120) {
+        size_t size = 120;
+        // not inside a character of more than one byte
+        while (size > 0 && (static_cast<unsigned char>(out[size]) & 0xC0) == 0x80)
+            --size;
+        out.resize(size);
+    }
+    while (!out.empty() && (out.back() == '.' || out.back() == ' '))
+        out.pop_back();
+    static const char *const reserved[] = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+                                           "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"};
+    const std::string stem = out.substr(0, out.find('.'));
+    for (const char *name : reserved)
+        if (boost::iequals(stem, name)) {
+            out = "_" + out;
+            break;
+        }
+    return out;
+}
+
 // Orca: BundleMetadata method implementations
 bool BundleMetadata::load_from_json(const std::string& path)
 {
@@ -6078,6 +6115,15 @@ bool BundleMetadata::load_from_json(const std::string& path)
         ifs >> j;
 
         if (j.contains("id")) this->id = j["id"].get<std::string>();
+        // MakerBot / UltiMaker Fork: bundle_structure.json -- of Bambu Studio's
+        // bundles and of Orca's own exports -- names the bundle only in
+        // "bundle_id": the name and a time stamp, which is what the id of an
+        // external bundle is (see BundleMetadata). Without an id,
+        // import_presets() made up a random one, and each import of the same
+        // file became another bundle with the same presets. Now the same file
+        // goes into the same folder again, and Orca asks before it overwrites
+        // the presets there.
+        else if (j.contains("bundle_id") && j["bundle_id"].is_string()) this->id = bundle_folder_name(j["bundle_id"].get<std::string>());
 
         if (j.contains("name")) this->name = j["name"].get<std::string>();
         else if (j.contains("bundle_id")) this->name = j["bundle_id"].get<std::string>();                 // backwards compat w bundle_structure.json
