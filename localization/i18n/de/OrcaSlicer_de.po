@@ -22486,3 +22486,43 @@ msgstr "Filament %d: rechte Düse (A)"
 #: src/slic3r/GUI/wxExtensions.cpp
 msgid "Filament %d: left nozzle (B)"
 msgstr "Filament %d: linke Düse (B)"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Not imported (%d):"
+msgstr "Nicht importiert (%d):"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "the file could not be read"
+msgstr "die Datei ist nicht lesbar"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "not a printer, filament or process preset"
+msgstr "kein Drucker-, Filament- oder Prozessprofil"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "a system preset has this name"
+msgstr "ein Systemprofil hat diesen Namen"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "the existing preset was kept"
+msgstr "das vorhandene Profil wurde behalten"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "its base preset \"%s\" is not installed"
+msgstr "sein Basisprofil \"%s\" ist nicht installiert"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "importing failed"
+msgstr "Import fehlgeschlagen"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "not a readable archive"
+msgstr "kein lesbares Archiv"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Imported for printers that are not set up here (%d):"
+msgstr "Importiert für Drucker, die hier nicht eingerichtet sind (%d):"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "These presets only show while such a printer is selected."
+msgstr "Diese Profile erscheinen nur, solange ein solcher Drucker gewählt ist."

@@ -44,6 +44,7 @@
 #include "PartPlate.hpp"
 #include "Preferences.hpp"
 #include "Widgets/ProgressDialog.hpp"
+#include "Widgets/DialogButtons.hpp"
 #include "BindDialog.hpp"
 #include "../Utils/MacDarkMode.hpp"
 #include "../Utils/PrintHost.hpp"
@@ -3817,6 +3818,93 @@ void MainFrame::export_config()
     }
 }
 
+namespace {
+
+// MakerBot / UltiMaker Fork: the result of "Import Configs" when files were
+// left out, or presets came in for printers that are not set up here. The
+// details sit in a read-only text box: it scrolls, a screen reader reads it,
+// and it can be copied.
+class ImportReportDialog : public DPIDialog
+{
+public:
+    ImportReportDialog(wxWindow *parent, const wxString &summary, const wxString &details)
+        : DPIDialog(parent, wxID_ANY, _L("Import result"), wxDefaultPosition, wxDefaultSize,
+                    wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER)
+    {
+        auto *main = new wxBoxSizer(wxVERTICAL);
+
+        auto *head = new wxStaticText(this, wxID_ANY, summary);
+        head->SetFont(::Label::Body_14);
+        head->Wrap(FromDIP(560));
+        main->Add(head, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+        main->AddSpacer(FromDIP(10));
+
+        auto *text = new wxTextCtrl(this, wxID_ANY, details, wxDefaultPosition, wxSize(FromDIP(560), FromDIP(280)),
+                                    wxTE_MULTILINE | wxTE_READONLY);
+        main->Add(text, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
+        main->AddSpacer(FromDIP(10));
+
+        auto *buttons = new DialogButtons(this, {"OK"});
+        buttons->GetOK()->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { EndModal(wxID_OK); });
+        main->Add(buttons, 0, wxEXPAND);
+
+        SetSizer(main);
+        Layout();
+        Fit();
+        Centre(wxBOTH);
+        wxGetApp().UpdateDlgDarkUI(this);
+
+        // Start in the details, which are what this dialog is for.
+        text->SetFocus();
+    }
+
+protected:
+    void on_dpi_changed(const wxRect &) override
+    {
+        Fit();
+        Refresh();
+    }
+};
+
+// The details for ImportReportDialog: a line for each file left out, with the
+// reason, then the printers that are not set up.
+wxString import_report_details(const PresetImportReport &report)
+{
+    using Reason = PresetImportReport::Reason;
+    wxString out;
+    if (!report.skipped.empty()) {
+        out += wxString::Format(_L("Not imported (%d):"), int(report.skipped.size())) + "\n";
+        for (const PresetImportReport::Skipped &skipped : report.skipped) {
+            wxString why;
+            switch (skipped.reason) {
+            case Reason::Unreadable: why = _L("the file could not be read"); break;
+            case Reason::NotAPreset: why = _L("not a printer, filament or process preset"); break;
+            case Reason::SystemName: why = _L("a system preset has this name"); break;
+            case Reason::KeptExisting: why = _L("the existing preset was kept"); break;
+            case Reason::BaseMissing: why = wxString::Format(_L("its base preset \"%s\" is not installed"), from_u8(skipped.detail)); break;
+            case Reason::Failed: why = _L("importing failed"); break;
+            case Reason::NotAnArchive: why = _L("not a readable archive"); break;
+            }
+            if (skipped.reason == Reason::Failed && !skipped.detail.empty())
+                why += ": " + from_u8(skipped.detail);
+            const wxString name   = from_u8(skipped.name);
+            const wxString source = wxFileName(from_u8(skipped.source)).GetFullName();
+            out += "  " + name + (source == name ? wxString() : " (" + source + ")") + ": " + why + "\n";
+        }
+    }
+    if (!report.printers_missing.empty()) {
+        if (!out.empty())
+            out += "\n";
+        out += wxString::Format(_L("Imported for printers that are not set up here (%d):"), int(report.printers_missing.size())) + "\n";
+        for (const std::string &printer : report.printers_missing)
+            out += "  " + from_u8(printer) + "\n";
+        out += _L("These presets only show while such a printer is selected.") + "\n";
+    }
+    return out;
+}
+
+} // namespace
+
 // Load a config file containing a Print, Filament & Printer preset.
 void MainFrame::load_config_file()
 {
@@ -3825,7 +3913,7 @@ void MainFrame::load_config_file()
  //       return;
     wxFileDialog dlg(this, _L("Select profile to load:"),
         !m_last_config.IsEmpty() ? get_dir_name(m_last_config) : wxGetApp().app_config->get_last_dir(),
-        "config.json", "Config files (*.json;*.zip;*.orca_printer;*.orca_bundle;*.orca_filament)|*.json;*.zip;*.orca_printer;*.orca_bundle;*.orca_filament", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
+        "config.json", "Config files (*.json;*.zip;*.orca_printer;*.orca_bundle;*.orca_filament;*.bbsflmt;*.bbscfg)|*.json;*.zip;*.orca_printer;*.orca_bundle;*.orca_filament;*.bbsflmt;*.bbscfg", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
      wxArrayString files;
     if (dlg.ShowModal() != wxID_OK)
         return;
@@ -3836,6 +3924,9 @@ void MainFrame::load_config_file()
         m_last_config = file;
     }
     bool update = false;
+    // MakerBot / UltiMaker Fork: what the import leaves out, for the dialog at
+    // the end
+    PresetImportReport report;
     wxGetApp().preset_bundle->import_presets(cfiles, [this](std::string const & name) {
             ConfigsOverwriteConfirmDialog dlg(this, from_u8(name), false);
             int           res = dlg.ShowModal();
@@ -3843,7 +3934,7 @@ void MainFrame::load_config_file()
             return std::find(ids, ids + 4, res) - ids;
         },
         ForwardCompatibilitySubstitutionRule::Enable,
-        *wxGetApp().app_config);
+        *wxGetApp().app_config, &report);
     if (!cfiles.empty()) {
         wxGetApp().app_config->update_config_dir(get_dir_name(cfiles.back()));
         wxGetApp().load_current_presets();
@@ -3859,6 +3950,13 @@ void MainFrame::load_config_file()
         "There are %d configs imported. (Only non-system and compatible configs)", cfiles.size()), cfiles.size());
     if(cfiles.empty())
         msg += _L("\nHint: Make sure you have added the corresponding printer before importing the configs.");
+    // MakerBot / UltiMaker Fork: say what was left out and why, and for which
+    // printers presets came in that are not set up here.
+    if (!report.skipped.empty() || !report.printers_missing.empty()) {
+        ImportReportDialog dlg(this, msg, import_report_details(report));
+        dlg.ShowModal();
+        return;
+    }
     MessageDialog dlg2(this,msg ,
                         _L("Import result"), wxOK);
     dlg2.ShowModal();

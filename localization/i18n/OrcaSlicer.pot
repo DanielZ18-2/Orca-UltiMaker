@@ -21094,3 +21094,43 @@ msgstr ""
 #: src/slic3r/GUI/wxExtensions.cpp
 msgid "Filament %d: left nozzle (B)"
 msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Not imported (%d):"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "the file could not be read"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "not a printer, filament or process preset"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "a system preset has this name"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "the existing preset was kept"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "its base preset \"%s\" is not installed"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "importing failed"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "not a readable archive"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Imported for printers that are not set up here (%d):"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "These presets only show while such a printer is selected."
+msgstr ""
