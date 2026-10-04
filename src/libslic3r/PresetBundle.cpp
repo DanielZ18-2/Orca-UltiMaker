@@ -64,6 +64,8 @@ const char *PresetBundle::ORCA_DEFAULT_PRINTER_VARIANT = "0.4";
 const char *PresetBundle::ORCA_DEFAULT_FILAMENT = "Generic PLA @System";
 const char *PresetBundle::ORCA_FILAMENT_LIBRARY = "OrcaFilamentLibrary";
 const char *PresetBundle::ORCA_DEFAULT_FILAMENT_PLACEHOLDER = "Default Filament";
+// MakerBot / UltiMaker Fork: see PresetBundle.hpp
+const char *PresetBundle::GENERAL_IMPORT_CONDITION = "printer_filament_diameter == 1.75";
 
 DynamicPrintConfig PresetBundle::construct_full_config(
     Preset& in_printer_preset,
@@ -1324,6 +1326,7 @@ static bool import_skipped(PresetImportReport *report, const std::string &source
     case PresetImportReport::Reason::BaseMissing: why = "base preset not installed"; break;
     case PresetImportReport::Reason::Failed: why = "failed"; break;
     case PresetImportReport::Reason::NotAnArchive: why = "not a readable archive"; break;
+    case PresetImportReport::Reason::NoGenericBase: why = "no generic Orca preset for this type"; break;
     }
     BOOST_LOG_TRIVIAL(warning) << "Preset import left out " << name << " (" << source << "): " << why
                                << (detail.empty() ? "" : ": ") << detail;
@@ -1397,12 +1400,718 @@ static std::vector<size_t> bases_first(const std::vector<PresetFileHead> &heads)
     return order;
 }
 
+// ---------------------------------------------------------------------------
+// MakerBot / UltiMaker Fork: general filament presets from presets made for
+// Bambu Lab printers -- the second way of "Import Configs".
+//
+// Filament makers often publish presets for Bambu Lab printers only: one
+// preset per material and printer, compatible_printers naming that printer
+// (Kingroon's .bbsflmt bundles, SUNLU's flat files), or user presets on top
+// of Bambu's system presets, one folder per printer (eSUN). Imported as they
+// are, they show only for those printers. A general import makes one preset
+// per material instead, shown for every printer taking 1.75 mm filament:
+//  - it inherits Orca's generic preset of the material ("Generic PLA
+//    @System" and the like), which keeps what depends on the printer:
+//    maximum volumetric speed, retraction, pressure advance, filament G-code;
+//  - it takes the maker's material values (GENERAL_IMPORT_VALUES) from the
+//    preset for one Bambu Lab printer: the one the user chose, else the
+//    nearest there is (bambu_model_rank());
+//  - a colour variant -- a preset inheriting another preset of the same
+//    import -- becomes a preset of its own: the general values of its base
+//    material and its own changes;
+//  - compatible_printers stays empty, compatible_printers_condition is
+//    PresetBundle::GENERAL_IMPORT_CONDITION.
+// Process and printer presets made for Bambu Lab printers are left out.
+// ---------------------------------------------------------------------------
+
+// One preset read from a file to import: a .json file, or a .json entry of an
+// archive.
+struct ImportDocument
+{
+    std::string source; // the file the user chose
+    int         entry;  // the entry's index in the archive; -1 for a .json file
+    json        doc;    // discarded where the text is no JSON
+};
+
+// The archives import_presets() opens (see there).
+static bool is_preset_archive(const std::string &file)
+{
+    for (const char *extension : {".orca_printer", ".orca_bundle", ".orca_filament", ".zip", ".bbsflmt", ".bbscfg"})
+        if (boost::iends_with(file, extension))
+            return true;
+    return false;
+}
+
+// The presets in the files, read as import_presets() reads them: each .json
+// file, and each .json entry of an archive but its bundle_structure.json.
+static std::vector<ImportDocument> read_import_documents(const std::vector<std::string> &files)
+{
+    std::vector<ImportDocument> out;
+    for (const std::string &file : files) {
+        if (Slic3r::is_json_file(file)) {
+            boost::nowide::ifstream ifs(file);
+            out.push_back({file, -1, json::parse(ifs, nullptr, false)});
+            continue;
+        }
+        if (!is_preset_archive(file))
+            continue;
+        FILE *zip_file = boost::nowide::fopen(file.c_str(), "rb");
+        if (zip_file == nullptr)
+            continue;
+        mz_zip_archive zip;
+        mz_zip_zero_struct(&zip);
+        if (mz_zip_reader_init_cfile(&zip, zip_file, 0, MZ_ZIP_FLAG_CASE_SENSITIVE | MZ_ZIP_FLAG_IGNORE_PATH)) {
+            const int count = int(mz_zip_reader_get_num_files(&zip));
+            for (int i = 0; i < count; ++i) {
+                mz_zip_archive_file_stat stat;
+                if (!mz_zip_reader_file_stat(&zip, mz_uint(i), &stat) || stat.m_is_directory)
+                    continue;
+                std::string name  = stat.m_filename;
+                const size_t slash = name.find_last_of('/');
+                if (slash != std::string::npos)
+                    name = name.substr(slash + 1);
+                if (name == BUNDLE_STRUCTURE_JSON_NAME || !Slic3r::is_json_file(name))
+                    continue;
+                size_t      size = 0;
+                void       *data = mz_zip_reader_extract_to_heap(&zip, mz_uint(i), &size, 0);
+                const char *text = static_cast<const char *>(data);
+                out.push_back({file, i, data != nullptr ? json::parse(text, text + size, nullptr, false) : json()});
+                mz_free(data);
+            }
+            mz_zip_reader_end(&zip);
+        }
+        fclose(zip_file);
+    }
+    return out;
+}
+
+// "x" or ["x", ...] -> "x"; empty for anything else.
+static std::string first_string(const json &value)
+{
+    if (value.is_string())
+        return value.get<std::string>();
+    if (value.is_array() && !value.empty() && value.front().is_string())
+        return value.front().get<std::string>();
+    return std::string();
+}
+
+static std::string json_string_of(const json &doc, const char *key)
+{
+    if (!doc.is_object())
+        return std::string();
+    const auto it = doc.find(key);
+    return it == doc.end() ? std::string() : first_string(*it);
+}
+
+// The Bambu Lab printer models as presets made for them name them: in
+// compatible_printers ("Bambu Lab X1 Carbon 0.4 nozzle"), after "@BBL "
+// ("Bambu PLA Basic @BBL X1C"), or ahead of the name (eSUN: "X1C eSUN PLA+
+// Filament"). Longest first where one name starts with another.
+static const std::vector<std::pair<std::string, std::string>> &bambu_designations()
+{
+    static const std::vector<std::pair<std::string, std::string>> designations{
+        {"X1 Carbon", "Bambu Lab X1 Carbon"}, {"X1C", "Bambu Lab X1 Carbon"}, {"X1E", "Bambu Lab X1E"},
+        {"X1", "Bambu Lab X1"},               {"X2D", "Bambu Lab X2D"},       {"P1S", "Bambu Lab P1S"},
+        {"P1P", "Bambu Lab P1P"},             {"P2S", "Bambu Lab P2S"},       {"H2D Pro", "Bambu Lab H2D Pro"},
+        {"H2D", "Bambu Lab H2D"},             {"H2S", "Bambu Lab H2S"},       {"H2C", "Bambu Lab H2C"},
+        {"A1 mini", "Bambu Lab A1 mini"},     {"A1M", "Bambu Lab A1 mini"},   {"A1", "Bambu Lab A1"},
+        {"A2L", "Bambu Lab A2L"}};
+    return designations;
+}
+
+// The model a designation at pos of text names, and the designation's length;
+// empty where none does. The designation has to end there: at the end of the
+// text or before a character that is no letter or digit ("X1" is no "X1E").
+static std::pair<std::string, size_t> bambu_designation_at(const std::string &text, size_t pos)
+{
+    auto letter_or_digit = [](char c) { return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); };
+    for (const auto &[designation, model] : bambu_designations()) {
+        const size_t end = pos + designation.size();
+        if (end > text.size() || !boost::iequals(text.substr(pos, designation.size()), designation))
+            continue;
+        if (end == text.size() || !letter_or_digit(text[end]))
+            return {model, designation.size()};
+    }
+    return {std::string(), 0};
+}
+
+// The model a printer preset is for: "Bambu Lab X1 Carbon 0.4 nozzle" ->
+// "Bambu Lab X1 Carbon". Empty for any other printer.
+static std::string bambu_model_of_printer(const std::string &printer)
+{
+    static const std::string prefix = "Bambu Lab ";
+    if (!boost::starts_with(printer, prefix))
+        return std::string();
+    std::string model = printer;
+    if (boost::ends_with(model, " nozzle")) {
+        model.resize(model.size() - 7);
+        const size_t space = model.find_last_of(' ');
+        // drop the nozzle diameter before " nozzle"
+        if (space != std::string::npos && space >= prefix.size() &&
+            model.find_first_not_of("0123456789.", space + 1) == std::string::npos)
+            model.resize(space);
+        else
+            model = printer;
+    }
+    return model;
+}
+
+// The model a preset name names: after "@BBL " or "@Bambu Lab ", or ahead of
+// the name. Empty where it names none.
+static std::string bambu_model_of_name(const std::string &name)
+{
+    const size_t bbl = name.find("@BBL ");
+    if (bbl != std::string::npos)
+        return bambu_designation_at(name, bbl + 5).first;
+    const size_t lab = name.find("@Bambu Lab ");
+    if (lab != std::string::npos)
+        return bambu_model_of_printer(name.substr(lab + 1));
+    const auto [model, length] = bambu_designation_at(name, 0);
+    return length < name.size() && name[length] == ' ' ? model : std::string();
+}
+
+// Where a general import falls back to when a material has no preset for
+// the chosen model: the X1 and P1 family first, whose hotend most makers tune
+// for, then the newer machines, then the A series.
+static int bambu_model_rank(const std::string &model)
+{
+    static const char *const order[] = {"Bambu Lab X1 Carbon", "Bambu Lab X1",  "Bambu Lab P1S",     "Bambu Lab X1E",
+                                        "Bambu Lab P1P",       "Bambu Lab P2S", "Bambu Lab H2S",     "Bambu Lab H2D",
+                                        "Bambu Lab H2D Pro",   "Bambu Lab X2D", "Bambu Lab H2C",     "Bambu Lab A1",
+                                        "Bambu Lab A1 mini",   "Bambu Lab A2L"};
+    const int count = int(sizeof(order) / sizeof(order[0]));
+    for (int i = 0; i < count; ++i)
+        if (model == order[i])
+            return i;
+    return count;
+}
+
+static void sort_bambu_models(std::vector<std::string> &models)
+{
+    std::sort(models.begin(), models.end(), [](const std::string &a, const std::string &b) {
+        const int ra = bambu_model_rank(a), rb = bambu_model_rank(b);
+        return ra != rb ? ra < rb : a < b;
+    });
+}
+
+// The material a preset is for, the same for its presets for each printer:
+// the name before "@" (Orca's alias of a user root preset), without a printer
+// designation ahead of it, runs of spaces as one. "KINGROON PLA Basic @Bambu
+// Lab X1 Carbon 0.4 nozzle" -> "KINGROON PLA Basic"; "X1C eSUN  PLA+
+// Filament" -> "eSUN PLA+ Filament".
+static std::string material_of(const std::string &name)
+{
+    auto collapse = [](const std::string &text) {
+        std::string out;
+        for (const char c : text) {
+            if (c == ' ' || c == '\t') {
+                if (!out.empty() && out.back() != ' ')
+                    out += ' ';
+            } else
+                out += c;
+        }
+        while (!out.empty() && out.back() == ' ')
+            out.pop_back();
+        return out;
+    };
+    std::string material                 = collapse(name.substr(0, name.find('@')));
+    const auto [model, length]           = bambu_designation_at(material, 0);
+    if (!model.empty() && length < material.size() && material[length] == ' ')
+        material = collapse(material.substr(length + 1));
+    return material.empty() ? collapse(name) : material;
+}
+
+// A document's own keys, under Orca's names where Bambu Studio's differ.
+static json own_values_of(const json &doc)
+{
+    json out = doc.is_object() ? doc : json::object();
+    if (out.contains("chamber_temperatures")) {
+        if (!out.contains("chamber_temperature"))
+            out["chamber_temperature"] = out["chamber_temperatures"];
+        out.erase("chamber_temperatures");
+    }
+    return out;
+}
+
+// An installed filament preset by name, as JSON (preset_values_as_json()); null
+// where there is none. For presets of the import that inherit one.
+using InstalledFilament = std::function<json(const std::string &name)>;
+
+// What a general import knows of one document.
+struct GeneralDocument
+{
+    bool                     filament{false};
+    bool                     bambu{false}; // made for Bambu Lab printers
+    std::string              name;
+    std::string              inherits;
+    int                      parent{-1};   // the document of the import it inherits
+    json                     values;       // with what it inherits; null where that is missing
+    std::string              missing;      // the base that is missing
+    std::vector<std::string> models;       // the Bambu Lab models it is for
+    std::string              material;     // material_of(name)
+    int                      group{-1};    // its index in GeneralAnalysis::materials
+    bool                     own_vendor{false};  // filament_vendor set here or in a parent of the import
+    std::string              own_filament_id;    // filament_id, likewise
+};
+
+struct GeneralAnalysis
+{
+    std::vector<ImportDocument>  documents;
+    std::vector<GeneralDocument> info;
+    // the materials of the filament presets made for Bambu Lab printers, in
+    // the order they first come up, as first spelt (eSUN spells some in two
+    // ways: "PLA-Silk", "PLA-silk"), with their documents
+    std::vector<std::pair<std::string, std::vector<size_t>>> materials;
+};
+
+static GeneralAnalysis analyse_general_import(std::vector<ImportDocument> documents, const InstalledFilament &installed)
+{
+    GeneralAnalysis a;
+    a.documents = std::move(documents);
+    const size_t count = a.documents.size();
+    a.info.resize(count);
+    std::map<std::string, size_t> filament_by_name; // of equal names, the first
+    for (size_t i = 0; i < count; ++i) {
+        const json      &doc = a.documents[i].doc;
+        GeneralDocument &d   = a.info[i];
+        if (!doc.is_object())
+            continue;
+        d.name     = json_string_of(doc, BBL_JSON_KEY_NAME);
+        d.inherits = json_string_of(doc, BBL_JSON_KEY_INHERITS);
+        // as import_json_presets() tells the types apart
+        d.filament = doc.contains("filament_settings_id") && !doc.contains("printer_settings_id") && !doc.contains("print_settings_id");
+        if (d.filament && !d.name.empty())
+            filament_by_name.emplace(d.name, i);
+    }
+
+    // values: each filament with what it inherits, from the import first
+    std::vector<char>           state(count, 0); // 0 open, 1 on the way, 2 done
+    std::function<void(size_t)> resolve = [&](size_t i) {
+        if (state[i] != 0)
+            return;
+        state[i]       = 1;
+        const json own = own_values_of(a.documents[i].doc);
+        {
+            GeneralDocument &d = a.info[i];
+            d.own_vendor       = !json_string_of(own, "filament_vendor").empty();
+            d.own_filament_id  = json_string_of(own, BBL_JSON_KEY_FILAMENT_ID);
+        }
+        const std::string inherits = a.info[i].inherits;
+        if (inherits.empty()) {
+            a.info[i].values = own;
+        } else if (const auto base = filament_by_name.find(inherits); base != filament_by_name.end() && base->second != i) {
+            const size_t p = base->second;
+            resolve(p);
+            GeneralDocument       &d      = a.info[i];
+            const GeneralDocument &parent = a.info[p];
+            d.parent                      = int(p);
+            if (state[p] != 2)
+                d.missing = inherits; // presets inheriting each other in a circle
+            else if (parent.values.is_null())
+                d.missing = parent.missing;
+            else {
+                d.values = parent.values;
+                d.values.update(own);
+            }
+            d.own_vendor = d.own_vendor || parent.own_vendor;
+            if (d.own_filament_id.empty())
+                d.own_filament_id = parent.own_filament_id;
+        } else {
+            json base_values = installed ? installed(inherits) : json();
+            GeneralDocument &d = a.info[i];
+            if (base_values.is_object()) {
+                d.values = std::move(base_values);
+                d.values.update(own);
+            } else
+                d.missing = inherits;
+        }
+        state[i] = 2;
+    };
+
+    // the printers: compatible_printers, else the names. Without a name,
+    // import_presets() imports a document as it is -- and reports it.
+    for (size_t i = 0; i < count; ++i) {
+        const json &doc = a.documents[i].doc;
+        if (!doc.is_object() || a.info[i].name.empty())
+            continue;
+        if (a.info[i].filament)
+            resolve(i);
+        GeneralDocument &d      = a.info[i];
+        const json      &with   = d.values.is_object() ? d.values : doc;
+        const auto       listed = with.find("compatible_printers");
+        if (listed != with.end() && listed->is_array())
+            for (const json &printer : *listed)
+                if (printer.is_string()) {
+                    const std::string model = bambu_model_of_printer(printer.get<std::string>());
+                    if (!model.empty() && std::find(d.models.begin(), d.models.end(), model) == d.models.end())
+                        d.models.push_back(model);
+                }
+        for (const std::string *named : {&d.name, &d.inherits})
+            if (d.models.empty()) {
+                const std::string model = bambu_model_of_name(*named);
+                if (!model.empty())
+                    d.models.push_back(model);
+            }
+    }
+    std::map<std::string, size_t> material_index;
+    for (size_t i = 0; i < count; ++i) {
+        if (!a.documents[i].doc.is_object() || a.info[i].name.empty())
+            continue;
+        GeneralDocument &d = a.info[i];
+        // else those of the nearest preset of the import it inherits
+        for (int up = d.parent, depth = 0; d.models.empty() && up >= 0 && depth < 8; up = a.info[size_t(up)].parent, ++depth)
+            d.models = a.info[size_t(up)].models;
+        d.bambu = !d.models.empty();
+        for (const std::string *named : {&d.name, &d.inherits})
+            if (named->find("@BBL") != std::string::npos || named->find("@Bambu Lab") != std::string::npos)
+                d.bambu = true;
+        if (!d.filament || !d.bambu)
+            continue;
+        d.material             = material_of(d.name);
+        const auto [it, added] = material_index.emplace(boost::to_lower_copy(d.material), a.materials.size());
+        if (added)
+            a.materials.push_back({d.material, {}});
+        d.group = int(it->second);
+        a.materials[it->second].second.push_back(i);
+    }
+    return a;
+}
+
+static bool lists_printer(const json &values, const std::string &printer)
+{
+    const auto listed = values.find("compatible_printers");
+    return listed != values.end() && listed->is_array() && std::find(listed->begin(), listed->end(), json(printer)) != listed->end();
+}
+
+// The document of a material whose values its general preset takes: one for
+// the chosen model, else for the model nearest in bambu_model_rank(). Of
+// several for a model, the one whose name names it (eSUN's presets for the P1S
+// inherit Bambu's for the X1 Carbon, which lists the P1S too), then the one
+// for its 0.4 mm nozzle, then the first. Documents whose base is missing do
+// not count. -1 where none is left; model_used: the model.
+static int general_choice(const GeneralAnalysis &a, const std::vector<size_t> &docs, const std::string &chosen, std::string &model_used)
+{
+    std::vector<std::string> models;
+    for (const size_t i : docs)
+        if (!a.info[i].values.is_null())
+            for (const std::string &model : a.info[i].models)
+                if (std::find(models.begin(), models.end(), model) == models.end())
+                    models.push_back(model);
+    sort_bambu_models(models);
+    const auto chosen_at = std::find(models.begin(), models.end(), chosen);
+    if (chosen_at != models.end())
+        std::rotate(models.begin(), chosen_at, chosen_at + 1);
+    for (const std::string &model : models) {
+        int best = -1, best_score = -1;
+        for (const size_t i : docs) {
+            const GeneralDocument &d = a.info[i];
+            if (d.values.is_null() || std::find(d.models.begin(), d.models.end(), model) == d.models.end())
+                continue;
+            const int score = (bambu_model_of_name(d.name) == model ? 2 : 0) + (lists_printer(d.values, model + " 0.4 nozzle") ? 1 : 0);
+            if (score > best_score) {
+                best       = int(i);
+                best_score = score;
+            }
+        }
+        if (best >= 0) {
+            model_used = model;
+            return best;
+        }
+    }
+    for (const size_t i : docs)
+        if (!a.info[i].values.is_null()) {
+            model_used.clear();
+            return int(i);
+        }
+    return -1;
+}
+
+// The values the general preset of document i takes: its own, with what it
+// inherits -- or, for a document inheriting another of the import (a colour
+// variant), the general values of its base material and its own changes.
+// values_from: the document the material values come from; model_used: the
+// model they are for.
+static json general_values(const GeneralAnalysis &a, size_t i, const std::string &chosen, size_t &values_from, std::string &model_used, int depth = 0)
+{
+    const GeneralDocument &d = a.info[i];
+    values_from              = i;
+    if (d.parent < 0 || depth > 8)
+        return d.values;
+    const GeneralDocument &parent = a.info[size_t(d.parent)];
+    int base = parent.group >= 0 ? general_choice(a, a.materials[size_t(parent.group)].second, chosen, model_used) : -1;
+    if (base < 0 || size_t(base) == i)
+        base = d.parent;
+    json values = general_values(a, size_t(base), chosen, values_from, model_used, depth + 1);
+    if (values.is_null())
+        return values;
+    values.update(own_values_of(a.documents[i].doc));
+    return values;
+}
+
+// Orca's generic preset a general preset of a filament type inherits:
+// "Generic <type> @System" where Orca has one, else the one of the material
+// family the type names (HS PLA+, PA6-CF, Easy PA ...). Empty where none fits
+// (PEEK, PVB, PCL ...).
+static std::string generic_base_of(const std::string &type, const std::function<bool(const std::string &)> &generic_installed)
+{
+    auto generic = [&generic_installed](const std::string &family) {
+        const std::string name = "Generic " + family + " @System";
+        return generic_installed(name) ? name : std::string();
+    };
+    if (!type.empty())
+        if (std::string exact = generic(type); !exact.empty())
+            return exact;
+    const std::string        upper = boost::to_upper_copy(type);
+    std::vector<std::string> words;
+    std::string              word;
+    for (const char c : upper + " ") {
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))
+            word += c;
+        else if (!word.empty()) {
+            words.push_back(word);
+            word.clear();
+        }
+    }
+    auto has  = [&upper](const char *part) { return upper.find(part) != std::string::npos; };
+    auto is_a = [&words](const char *whole) { return std::find(words.begin(), words.end(), whole) != words.end(); };
+    // PA, PA6, PA12, PAHT, NYLON -- not PAINT
+    const bool polyamide = std::any_of(words.begin(), words.end(), [](const std::string &w) {
+        return w == "NYLON" || w == "PAHT" ||
+               (boost::starts_with(w, "PA") && w.find_first_not_of("0123456789", 2) == std::string::npos);
+    });
+    const bool  carbon = has("CF");
+    std::string family;
+    if (has("PLA"))
+        family = carbon ? "PLA-CF" : "PLA";
+    else if (has("PETG") || is_a("PET"))
+        family = carbon ? "PETG-CF" : "PETG";
+    else if (has("PCTG"))
+        family = "PCTG";
+    else if (has("ABS"))
+        family = "ABS";
+    else if (has("ASA"))
+        family = "ASA";
+    else if (has("TPU") || has("TPE"))
+        family = "TPU";
+    else if (has("HIPS"))
+        family = "HIPS";
+    else if (has("PVA"))
+        family = "PVA";
+    else if (polyamide)
+        family = carbon ? "PA-CF" : "PA";
+    else if (is_a("PC"))
+        family = "PC";
+    else if (is_a("PP"))
+        family = carbon ? "PP-CF" : has("GF") ? "PP-GF" : "PP";
+    return family.empty() ? std::string() : generic(family);
+}
+
+// The material values a general preset takes over (Orca's names): what the
+// maker measured for the material, not what depends on the printer.
+static const char *const GENERAL_IMPORT_VALUES[] = {
+    "nozzle_temperature", "nozzle_temperature_initial_layer", "nozzle_temperature_range_low", "nozzle_temperature_range_high",
+    "cool_plate_temp", "cool_plate_temp_initial_layer", "textured_cool_plate_temp", "textured_cool_plate_temp_initial_layer",
+    "eng_plate_temp", "eng_plate_temp_initial_layer", "hot_plate_temp", "hot_plate_temp_initial_layer",
+    "textured_plate_temp", "textured_plate_temp_initial_layer", "supertack_plate_temp", "supertack_plate_temp_initial_layer",
+    "chamber_temperature", "temperature_vitrification",
+    "fan_min_speed", "fan_max_speed", "fan_cooling_layer_time", "slow_down_for_layer_cooling", "slow_down_layer_time",
+    "slow_down_min_speed", "close_fan_the_first_x_layers", "full_fan_speed_layer", "first_x_layer_fan_speed",
+    "enable_overhang_bridge_fan", "overhang_fan_speed", "overhang_fan_threshold", "reduce_fan_stop_start_freq",
+    "additional_cooling_fan_speed", "support_material_interface_fan_speed", "internal_bridge_fan_speed",
+    "filament_flow_ratio", "filament_density", "filament_cost", "filament_shrink", "filament_soluble",
+    "filament_is_support", "default_filament_colour", "required_nozzle_HRC"};
+
+// What a general import makes of the documents: the presets to import, and
+// the documents it takes, which import_presets() then does not import as they
+// are.
+struct GeneralImport
+{
+    struct Made
+    {
+        json        preset;
+        std::string source;      // the chosen file the preset comes from
+        std::string model;       // the Bambu Lab model whose values it took
+        bool        other_model; // not the chosen one: there was no preset for it
+        bool        variant;     // a colour variant, with its own changes
+        std::string base;        // Orca's generic preset it inherits
+    };
+    std::vector<Made>                     made;
+    std::set<std::pair<std::string, int>> taken; // (file, entry), the file as import_presets() spells it
+    size_t                                merged{0};       // presets for other printers that went into made
+    size_t                                not_filament{0}; // process and printer presets left out
+
+    bool takes(const std::string &file, int entry) const
+    {
+        return !taken.empty() && taken.count({boost::filesystem::path(file).make_preferred().string(), entry}) != 0;
+    }
+};
+
+static GeneralImport make_general_import(const GeneralAnalysis                             &a,
+                                         const std::string                                 &chosen,
+                                         const std::function<bool(const std::string &)> &generic_installed,
+                                         PresetImportReport                                *report)
+{
+    GeneralImport general;
+    for (size_t i = 0; i < a.documents.size(); ++i)
+        if (a.info[i].bambu) {
+            general.taken.emplace(boost::filesystem::path(a.documents[i].source).make_preferred().string(), a.documents[i].entry);
+            if (!a.info[i].filament)
+                ++general.not_filament;
+        }
+    for (const auto &[material, docs] : a.materials) {
+        std::string model;
+        const int   chosen_doc = general_choice(a, docs, chosen, model);
+        if (chosen_doc < 0) {
+            // every preset of the material inherits one that is not installed
+            import_skipped(report, a.documents[docs.front()].source, material, PresetImportReport::Reason::BaseMissing,
+                           a.info[docs.front()].missing);
+            continue;
+        }
+        const size_t     i           = size_t(chosen_doc);
+        size_t           values_from = i;
+        const json       values      = general_values(a, i, chosen, values_from, model);
+        const std::string type       = json_string_of(values, "filament_type");
+        const std::string base       = values.is_null() ? std::string() : generic_base_of(type, generic_installed);
+        if (values.is_null()) {
+            import_skipped(report, a.documents[i].source, material, PresetImportReport::Reason::BaseMissing, a.info[i].missing);
+            continue;
+        }
+        if (base.empty()) {
+            import_skipped(report, a.documents[i].source, material, PresetImportReport::Reason::NoGenericBase, type);
+            continue;
+        }
+        general.merged += docs.size() - 1;
+
+        const GeneralDocument &d = a.info[i];
+        // the maker: as the presets name it; where it came with a Bambu
+        // preset they inherit (eSUN's), the first word of the material
+        std::string vendor = json_string_of(values, "filament_vendor");
+        if (!d.own_vendor && !a.info[values_from].own_vendor) {
+            const size_t space = material.find(' ');
+            if (space != std::string::npos && !boost::iequals(material.substr(0, space), vendor.substr(0, vendor.find(' '))))
+                vendor = material.substr(0, space);
+        }
+        std::string filament_id = d.own_filament_id;
+        if (filament_id.empty())
+            filament_id = a.info[values_from].own_filament_id;
+
+        json preset                        = json::object();
+        preset[BBL_JSON_KEY_NAME]          = material;
+        preset[BBL_JSON_KEY_INHERITS]      = base;
+        preset[BBL_JSON_KEY_FROM]          = "User";
+        const std::string version          = json_string_of(a.documents[i].doc, BBL_JSON_KEY_VERSION);
+        preset[BBL_JSON_KEY_VERSION]       = version.empty() ? std::string("1.0.0.0") : version;
+        preset["filament_settings_id"]     = json::array({material});
+        if (!filament_id.empty())
+            preset[BBL_JSON_KEY_FILAMENT_ID] = filament_id;
+        preset["filament_vendor"]               = json::array({vendor});
+        preset["filament_type"]                 = json::array({type});
+        preset["compatible_printers"]           = json::array();
+        preset["compatible_printers_condition"] = PresetBundle::GENERAL_IMPORT_CONDITION;
+        // Bambu Studio keeps a value for each extruder variant; the one for
+        // "Direct Drive Standard"
+        size_t     at       = 0;
+        const auto variants = values.find("filament_extruder_variant");
+        if (variants != values.end() && variants->is_array())
+            for (size_t k = 0; k < variants->size(); ++k)
+                if ((*variants)[k] == "Direct Drive Standard") {
+                    at = k;
+                    break;
+                }
+        for (const char *key : GENERAL_IMPORT_VALUES) {
+            const auto it = values.find(key);
+            if (it == values.end())
+                continue;
+            if (it->is_array()) {
+                if (it->empty())
+                    continue;
+                const json &value = (*it)[at < it->size() ? at : 0];
+                if (value.is_string() && value.get<std::string>() != "nil")
+                    preset[key] = json::array({value});
+            } else if (it->is_string() && it->get<std::string>() != "nil")
+                preset[key] = *it;
+        }
+        std::string notes = "General preset made by Import Configs for every printer taking 1.75 mm filament, from \"" +
+                            a.info[values_from].name + "\"";
+        if (values_from != i)
+            notes += " and the changes of \"" + d.name + "\"";
+        notes += ". Taken over: temperatures, cooling, flow ratio, density and cost. From " + base +
+                 ": everything that depends on the printer -- maximum volumetric speed, retraction, pressure advance, "
+                 "filament G-code. Not calibrated on any printer yet.";
+        const std::string maker_notes = json_string_of(values, "filament_notes");
+        if (!maker_notes.empty())
+            notes += "\n\n" + maker_notes;
+        preset["filament_notes"] = notes;
+
+        general.made.push_back({std::move(preset), a.documents[i].source, model, model != chosen, values_from != i, base});
+    }
+    return general;
+}
+
+// An installed preset's values as JSON, as a preset file holds them: vectors
+// as lists of strings, the rest as strings.
+static json preset_values_as_json(const Preset &preset)
+{
+    json out = json::object();
+    for (const std::string &key : preset.config.keys()) {
+        const ConfigOption *option = preset.config.option(key);
+        if (option == nullptr)
+            continue;
+        if (option->is_vector())
+            out[key] = static_cast<const ConfigOptionVectorBase *>(option)->vserialize();
+        else
+            out[key] = option->serialize();
+    }
+    out[BBL_JSON_KEY_NAME] = preset.name;
+    return out;
+}
+
+// The installed filament presets, looked up once each.
+static InstalledFilament installed_filaments(PresetCollection &filaments)
+{
+    auto cache = std::make_shared<std::map<std::string, json>>();
+    return [&filaments, cache](const std::string &name) -> json {
+        const auto known = cache->find(name);
+        if (known != cache->end())
+            return known->second;
+        const Preset *preset = filaments.find_preset2(name, true);
+        json          out    = preset != nullptr ? preset_values_as_json(*preset) : json();
+        cache->emplace(name, out);
+        return out;
+    };
+}
+
+bool PresetBundle::is_general_import(const Preset &filament)
+{
+    const auto *condition = filament.config.option<ConfigOptionString>("compatible_printers_condition");
+    if (filament.type != Preset::TYPE_FILAMENT || condition == nullptr || condition->value != GENERAL_IMPORT_CONDITION)
+        return false;
+    const auto *listed = filament.config.option<ConfigOptionStrings>("compatible_printers");
+    return listed == nullptr || listed->values.empty();
+}
+
+BambuFilamentScan PresetBundle::scan_bambu_filaments(const std::vector<std::string> &files)
+{
+    BambuFilamentScan     scan;
+    const GeneralAnalysis a = analyse_general_import(read_import_documents(files), installed_filaments(this->filaments));
+    for (const auto &[material, docs] : a.materials)
+        for (const size_t i : docs) {
+            ++scan.filaments;
+            for (const std::string &model : a.info[i].models)
+                if (std::find(scan.models.begin(), scan.models.end(), model) == scan.models.end())
+                    scan.models.push_back(model);
+        }
+    sort_bambu_models(scan.models);
+    return scan;
+}
+
 // Import presets from UI control
 PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string> &              files,
                                                         std::function<int(std::string const &)> override_confirm,
                                                         ForwardCompatibilitySubstitutionRule    rule,
                                                         AppConfig&                            config,
-                                                        PresetImportReport*                   report)
+                                                        PresetImportReport*                   report,
+                                                        const std::string&                    general_from)
 {
     bundles.PauseRead(); // Pause threads from reading
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " entry";
@@ -1413,12 +2122,26 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
     if (user_id.empty())
         user_id = DEFAULT_USER_FOLDER_NAME;
     this->update_user_presets_directory(user_id);
+    // MakerBot / UltiMaker Fork: a general import (general_from names the
+    // Bambu Lab model whose values to take) makes general presets of the
+    // filament presets made for Bambu Lab printers and leaves their process
+    // and printer presets out; see make_general_import(). Everything else in
+    // the files comes in as it is.
+    GeneralImport general;
+    if (!general_from.empty())
+        general = make_general_import(analyse_general_import(read_import_documents(files), installed_filaments(this->filaments)),
+                                      general_from,
+                                      [this](const std::string &name) {
+                                          const Preset *generic = this->filaments.find_preset(name, false);
+                                          return generic != nullptr && generic->is_system;
+                                      },
+                                      report);
     // MakerBot / UltiMaker Fork: the single preset files first, each base
     // ahead of the presets that inherit it (bases_first()).
     std::vector<std::string>    single_files;
     std::vector<PresetFileHead> single_heads;
     for (const std::string &file : files)
-        if (Slic3r::is_json_file(file)) {
+        if (Slic3r::is_json_file(file) && !general.takes(file, -1)) {
             single_files.push_back(file);
             single_heads.push_back(read_preset_file_head(file));
         }
@@ -1514,6 +2237,7 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
             std::vector<mz_uint>        entries;
             std::vector<std::string>    entry_names;
             std::vector<PresetFileHead> entry_heads;
+            size_t                      taken_by_general = 0; // MakerBot / UltiMaker Fork, see below
             int num_files = mz_zip_reader_get_num_files(&zip_archive);
             for (int i = 0; i < num_files; i++) {
                 mz_zip_archive_file_stat file_stat;
@@ -1529,6 +2253,11 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
                     // MakerBot / UltiMaker Fork: a folder, or a file that is no
                     // JSON, holds no preset
                     if (file_stat.m_is_directory || !Slic3r::is_json_file(file_name)) continue;
+                    // MakerBot / UltiMaker Fork: taken by the general import
+                    if (general.takes(file, i)) {
+                        ++taken_by_general;
+                        continue;
+                    }
                     size_t      size = 0;
                     void       *data = mz_zip_reader_extract_to_heap(&zip_archive, i, &size, 0);
                     const char *text = static_cast<const char *>(data);
@@ -1569,6 +2298,11 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
                 if (ec) BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << " remove directory failed: " << ec.message();
                 has_bundle_structure = false;
             }
+            // MakerBot / UltiMaker Fork: a bundle the general import took whole
+            // stays as it was, if it is here already -- not listed anew
+            // without presets.
+            if (has_bundle_structure && entries.empty() && taken_by_general > 0)
+                has_bundle_structure = false;
             // Only save bundle_metadata.json for bundles (when bundle_structure.json was present)
             if (has_bundle_structure) {
                 // Save metadata to bundle_metadata.json
@@ -1600,6 +2334,37 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
             // of presets -- it used to be passed over without a word.
             import_skipped(report, file, file_name_of(file), PresetImportReport::Reason::NotAPreset);
         }
+    }
+    // MakerBot / UltiMaker Fork: the general presets come in as user presets of
+    // their own, inheriting Orca's generic presets. import_json_presets()
+    // reads each from a file in a folder of its own, which goes again.
+    if (!general.made.empty()) {
+        boost::system::error_code ec;
+        const fs::path            folder = fs::path(data_dir()) / PRESET_USER_DIR / user_id / "temp_general";
+        fs::remove_all(folder, ec);
+        fs::create_directories(folder, ec);
+        if (ec)
+            BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << " create directory failed: " << ec.message();
+        for (size_t k = 0; k < general.made.size(); ++k) {
+            const GeneralImport::Made &made = general.made[k];
+            std::string                path = (folder / ("general_" + std::to_string(k) + ".json")).make_preferred().string();
+            {
+                boost::nowide::ofstream out(path);
+                out << made.preset.dump(4);
+            }
+            if (import_json_presets(substitutions, path, override_confirm, rule, overwrite, result, std::string(), report, made.source)) {
+                // the chosen file, not the folder that goes again
+                result.back() = made.source;
+                if (report != nullptr)
+                    report->general.push_back(
+                        {made.preset[BBL_JSON_KEY_NAME].get<std::string>(), made.model, made.other_model, made.variant, made.base});
+            }
+        }
+        fs::remove_all(folder, ec);
+    }
+    if (report != nullptr) {
+        report->general_merged += general.merged;
+        report->general_not_filament += general.not_filament;
     }
     // MakerBot / UltiMaker Fork: of the printers the imported presets are made
     // for, the report keeps those not set up here -- no visible printer preset

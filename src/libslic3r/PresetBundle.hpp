@@ -161,6 +161,7 @@ struct PresetImportReport
         BaseMissing,  // the preset it inherits (detail) is not installed
         Failed,       // importing or saving failed (detail: the error)
         NotAnArchive, // a chosen archive that cannot be opened
+        NoGenericBase, // general import: Orca has no generic preset for its type (detail)
     };
     struct Skipped
     {
@@ -173,6 +174,34 @@ struct PresetImportReport
     // Printers named in compatible_printers of the imported presets and not
     // set up here. Until one of them is, Orca does not show these presets.
     std::vector<std::string> printers_missing;
+    // The general presets a general import made (import_presets() with
+    // general_from): the preset, the Bambu Lab model whose values it took --
+    // another than the chosen one where the material had no preset for that
+    // --, whether it is a colour variant with changes of its own, and Orca's
+    // generic preset it inherits.
+    struct General
+    {
+        std::string name;
+        std::string model;
+        bool        other_model{false};
+        bool        variant{false};
+        std::string base;
+    };
+    std::vector<General> general;
+    // Presets for other Bambu Lab printers that went into the general ones,
+    // and process and printer presets for Bambu Lab printers a general import
+    // left out.
+    size_t general_merged{0};
+    size_t general_not_filament{0};
+};
+
+// MakerBot / UltiMaker Fork: the filament presets made for Bambu Lab printers
+// among files to import, for the question "Import Configs" asks before it
+// imports them (PresetBundle::scan_bambu_filaments()).
+struct BambuFilamentScan
+{
+    size_t                   filaments{0};
+    std::vector<std::string> models; // the Bambu Lab models they are for, X1 Carbon first
 };
 
 // Bundle of Print + Filament + Printer presets.
@@ -229,11 +258,20 @@ public:
 
     // MakerBot / UltiMaker Fork: report, when given, collects what the import
     // left out and the printers it brought presets for that are not set up.
+    // general_from, when given, names the Bambu Lab printer model ("Bambu Lab
+    // X1 Carbon") whose values general presets take: the import then makes
+    // such presets of the filament presets made for Bambu Lab printers, and
+    // leaves out their process and printer presets.
     PresetsConfigSubstitutions import_presets(std::vector<std::string>& files,
                                               std::function<int(std::string const&)> override_confirm,
                                               ForwardCompatibilitySubstitutionRule rule,
                                               AppConfig& config,
-                                              PresetImportReport* report = nullptr);
+                                              PresetImportReport* report = nullptr,
+                                              const std::string& general_from = std::string());
+
+    // MakerBot / UltiMaker Fork: the filament presets made for Bambu Lab
+    // printers in files, before they are imported.
+    BambuFilamentScan scan_bambu_filaments(const std::vector<std::string>& files);
 
     // MakerBot / UltiMaker Fork: a file left out goes into report, when
     // given, under report_source (the file the user chose; default: file).
@@ -512,6 +550,13 @@ public:
 	static const char *ORCA_DEFAULT_FILAMENT;
     static const char *ORCA_FILAMENT_LIBRARY;
     static const char *ORCA_DEFAULT_FILAMENT_PLACEHOLDER;
+    // MakerBot / UltiMaker Fork: compatible_printers_condition of the general
+    // filament presets import_presets() makes: every printer taking 1.75 mm
+    // filament (printer_filament_diameter: see
+    // PresetCollection::update_compatible_internal()). And whether a filament
+    // preset is such a preset, not tied to printers yet.
+    static const char *GENERAL_IMPORT_CONDITION;
+    static bool        is_general_import(const Preset &filament);
 
 
     static std::array<Preset::Type, 3>  types_list(PrinterTechnology pt) {
