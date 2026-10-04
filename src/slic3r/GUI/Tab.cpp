@@ -6837,7 +6837,11 @@ void Tab::save_preset(std::string name /*= ""*/, bool detach, bool save_to_proje
     // Orca: check if compatible_printers exists and is not empty, set it to the current printer if it is empty
     // Ensures that custom filaments based on system are not accidentally allowed for all printers
     // Can still be set for all after creation
-    if (m_presets->type() == Preset::TYPE_FILAMENT && !exist_preset && edited_preset.is_system) {
+    // MakerBot / UltiMaker Fork: so is a copy of a general preset "Import
+    // Configs" made from a preset for a Bambu Lab printer -- calibrated here,
+    // it is a preset for this printer (D4).
+    if (m_presets->type() == Preset::TYPE_FILAMENT && !exist_preset &&
+        (edited_preset.is_system || PresetBundle::is_general_import(edited_preset))) {
         Preset* _curr_printer = const_cast<Preset*>(&wxGetApp().preset_bundle->printers.get_selected_preset_base());
         ConfigOptionStrings* compatible_printers = m_config->option<ConfigOptionStrings>("compatible_printers");
         if (nullptr != _curr_printer && compatible_printers && compatible_printers->values.empty())

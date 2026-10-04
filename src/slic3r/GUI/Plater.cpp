@@ -402,12 +402,17 @@ static void mb_show_material_hint(size_t slot)
     // the binding rather than the name also keeps a user profile that
     // inherits from ours out of the warning: it inherits the binding too.
     bool library_only = false;
+    // MakerBot / UltiMaker Fork: a general preset "Import Configs" made from
+    // a maker's preset for a Bambu Lab printer (D4). No binding either, but
+    // the maker's values, not Orca's -- it has its own hint below.
+    bool general_import = false;
     const auto& fnames = wxGetApp().preset_bundle->filament_presets;
     if (slot < fnames.size())
         if (const Preset* fp = wxGetApp().preset_bundle->filaments.find_preset(fnames[slot])) {
             fila_type = fp->config.opt_string("filament_type", 0);
             const auto* cp = fp->config.opt<ConfigOptionStrings>("compatible_printers");
-            library_only = !cp || cp->values.empty();
+            general_import = PresetBundle::is_general_import(*fp);
+            library_only = (!cp || cp->values.empty()) && !general_import;
         }
     wxString hint;
     switch (mb_material_hint(pcfg, fila_type, slot)) {
@@ -453,11 +458,28 @@ static void mb_show_material_hint(size_t slot)
                "to tune them."),
             wxString::FromUTF8(fila_type.c_str()));
     }
+    // MakerBot / UltiMaker Fork: a general preset, on every printer, until the
+    // user saves a calibrated copy -- Tab::save_preset() ties such a copy to
+    // the printer, and it is no general preset then.
+    if (general_import) {
+        if (!hint.empty()) hint += "\n\n";
+        hint += wxString::Format(
+            _L("%s is a general preset made from the maker's values for a Bambu Lab "
+               "printer, and nobody has calibrated it on this printer yet. Calibrate it "
+               "(Calibration menu: Temperature, Flow ratio, Pressure advance) and save it "
+               "under a new name: the copy is made for this printer only, and this hint "
+               "no longer shows for it."),
+            wxString::FromUTF8(fnames[slot].c_str()));
+    }
 
+    // MakerBot / UltiMaker Fork: the calibration hint stays until it is
+    // closed, like the one-head notice (202B); the others fade after ten
+    // seconds.
     if (!hint.empty())
         if (auto* nm = wxGetApp().plater()->get_notification_manager())
             nm->push_notification(NotificationType::CustomNotification,
-                                  NotificationManager::NotificationLevel::RegularNotificationLevel,
+                                  general_import ? NotificationManager::NotificationLevel::WarningNotificationLevel :
+                                                   NotificationManager::NotificationLevel::RegularNotificationLevel,
                                   std::string(hint.ToUTF8().data()));
 }
 

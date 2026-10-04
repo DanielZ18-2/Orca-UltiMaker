@@ -22598,3 +22598,9 @@ msgstr[1] "%d Prozess- oder Druckerprofile für Bambu-Lab-Drucker wurden ausgela
 #: src/slic3r/GUI/MainFrame.cpp
 msgid "Orca has no generic preset for its type \"%s\""
 msgstr "Orca hat kein generisches Profil für seinen Typ \"%s\""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"%s is a general preset made from the maker's values for a Bambu Lab printer, and nobody has calibrated it on this printer yet. Calibrate it (Calibration menu: Temperature, Flow ratio, Pressure advance) and save it under a new name: the copy is made for this printer only, and this hint no longer shows for it."
+msgstr ""
+"%s ist ein allgemeines Profil aus den Herstellerwerten für einen Bambu-Lab-Drucker, und an diesem Drucker hat es noch niemand kalibriert. Kalibrieren Sie es (Menü Kalibrierung: Temperatur, Flussverhältnis, Pression Advance) und speichern Sie es unter einem neuen Namen: Die Kopie gilt dann nur für diesen Drucker, und dieser Hinweis erscheint für sie nicht mehr."

@@ -21206,3 +21206,8 @@ msgstr[1] ""
 #: src/slic3r/GUI/MainFrame.cpp
 msgid "Orca has no generic preset for its type \"%s\""
 msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+msgid ""
+"%s is a general preset made from the maker's values for a Bambu Lab printer, and nobody has calibrated it on this printer yet. Calibrate it (Calibration menu: Temperature, Flow ratio, Pressure advance) and save it under a new name: the copy is made for this printer only, and this hint no longer shows for it."
+msgstr ""
