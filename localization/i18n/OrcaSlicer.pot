@@ -21134,3 +21134,75 @@ msgstr ""
 #: src/slic3r/GUI/MainFrame.cpp
 msgid "These presets only show while such a printer is selected."
 msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Filament presets for Bambu Lab printers"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "%d of the chosen filament presets is made for Bambu Lab printers."
+msgid_plural "%d of the chosen filament presets are made for Bambu Lab printers."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Import them as they are, for Bambu Lab printers only"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "They show only while such a printer is set up and selected."
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Make general presets for every printer taking 1.75 mm filament"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "One preset per material and colour variant. Temperatures, cooling, flow ratio, density and cost come from the maker's preset for the printer below; Orca's generic preset of the material supplies everything that depends on the printer. Process presets are left out. Calibrate a general preset on your printer before relying on it."
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Values of the preset for:"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "General presets for every printer taking 1.75 mm filament (%d):"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Bambu Lab printer"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+#, boost-format
+msgid "%1%: values for the %2% with changes of its own, the rest from %3%"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+#, boost-format
+msgid "%1%: values for the %2%, the rest from %3%"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "(no preset for the chosen printer)"
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "%d preset for other Bambu Lab printers went into these."
+msgid_plural "%d presets for other Bambu Lab printers went into these."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Calibrate a general preset on your printer before relying on it."
+msgstr ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "%d process or printer preset for Bambu Lab printers was left out: a general import takes filament presets only."
+msgid_plural "%d process or printer presets for Bambu Lab printers were left out: a general import takes filament presets only."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Orca has no generic preset for its type \"%s\""
+msgstr ""

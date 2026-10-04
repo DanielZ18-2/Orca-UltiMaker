@@ -22526,3 +22526,75 @@ msgstr "Importiert für Drucker, die hier nicht eingerichtet sind (%d):"
 #: src/slic3r/GUI/MainFrame.cpp
 msgid "These presets only show while such a printer is selected."
 msgstr "Diese Profile erscheinen nur, solange ein solcher Drucker gewählt ist."
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Filament presets for Bambu Lab printers"
+msgstr "Filamentprofile für Bambu-Lab-Drucker"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "%d of the chosen filament presets is made for Bambu Lab printers."
+msgid_plural "%d of the chosen filament presets are made for Bambu Lab printers."
+msgstr[0] "%d der gewählten Filamentprofile ist für Bambu-Lab-Drucker gemacht."
+msgstr[1] "%d der gewählten Filamentprofile sind für Bambu-Lab-Drucker gemacht."
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Import them as they are, for Bambu Lab printers only"
+msgstr "So importieren, wie sie sind, nur für Bambu-Lab-Drucker"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "They show only while such a printer is set up and selected."
+msgstr "Sie erscheinen nur, solange ein solcher Drucker eingerichtet und gewählt ist."
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Make general presets for every printer taking 1.75 mm filament"
+msgstr "Allgemeine Profile für jeden Drucker mit 1,75-mm-Filament anlegen"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "One preset per material and colour variant. Temperatures, cooling, flow ratio, density and cost come from the maker's preset for the printer below; Orca's generic preset of the material supplies everything that depends on the printer. Process presets are left out. Calibrate a general preset on your printer before relying on it."
+msgstr "Ein Profil je Material und Farbvariante. Temperaturen, Kühlung, Flussverhältnis, Dichte und Preis stammen aus dem Herstellerprofil für den unten gewählten Drucker; alles, was vom Drucker abhängt, liefert Orcas generisches Profil des Materials. Prozessprofile werden ausgelassen. Kalibrieren Sie ein allgemeines Profil an Ihrem Drucker, bevor Sie sich darauf verlassen."
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Values of the preset for:"
+msgstr "Werte aus dem Profil für:"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "General presets for every printer taking 1.75 mm filament (%d):"
+msgstr "Allgemeine Profile für jeden Drucker mit 1,75-mm-Filament (%d):"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Bambu Lab printer"
+msgstr "Bambu-Lab-Drucker"
+
+#: src/slic3r/GUI/MainFrame.cpp
+#, boost-format
+msgid "%1%: values for the %2% with changes of its own, the rest from %3%"
+msgstr "%1%: Werte für den %2% mit eigenen Änderungen, der Rest aus %3%"
+
+#: src/slic3r/GUI/MainFrame.cpp
+#, boost-format
+msgid "%1%: values for the %2%, the rest from %3%"
+msgstr "%1%: Werte für den %2%, der Rest aus %3%"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "(no preset for the chosen printer)"
+msgstr "(kein Profil für den gewählten Drucker)"
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "%d preset for other Bambu Lab printers went into these."
+msgid_plural "%d presets for other Bambu Lab printers went into these."
+msgstr[0] "%d Profil für andere Bambu-Lab-Drucker ist darin aufgegangen."
+msgstr[1] "%d Profile für andere Bambu-Lab-Drucker sind darin aufgegangen."
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Calibrate a general preset on your printer before relying on it."
+msgstr "Kalibrieren Sie ein allgemeines Profil an Ihrem Drucker, bevor Sie sich darauf verlassen."
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "%d process or printer preset for Bambu Lab printers was left out: a general import takes filament presets only."
+msgid_plural "%d process or printer presets for Bambu Lab printers were left out: a general import takes filament presets only."
+msgstr[0] "%d Prozess- oder Druckerprofil für Bambu-Lab-Drucker wurde ausgelassen: Ein allgemeiner Import übernimmt nur Filamentprofile."
+msgstr[1] "%d Prozess- oder Druckerprofile für Bambu-Lab-Drucker wurden ausgelassen: Ein allgemeiner Import übernimmt nur Filamentprofile."
+
+#: src/slic3r/GUI/MainFrame.cpp
+msgid "Orca has no generic preset for its type \"%s\""
+msgstr "Orca hat kein generisches Profil für seinen Typ \"%s\""

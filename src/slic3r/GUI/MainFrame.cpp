@@ -3866,13 +3866,164 @@ protected:
     }
 };
 
-// The details for ImportReportDialog: a line for each file left out, with the
-// reason, then the printers that are not set up.
+// MakerBot / UltiMaker Fork: asked before "Import Configs" imports filament
+// presets made for Bambu Lab printers -- as they are, for those printers
+// only, or as general presets for every printer taking 1.75 mm filament, with
+// the values of the presets for one Bambu Lab printer
+// (PresetBundle::import_presets(), general_from). Plain wx controls: the
+// keyboard reaches them, and a screen reader reads them.
+class BambuImportDialog : public DPIDialog
+{
+public:
+    BambuImportDialog(wxWindow *parent, const BambuFilamentScan &scan, bool bambu_printer_here)
+        : DPIDialog(parent, wxID_ANY, _L("Filament presets for Bambu Lab printers"), wxDefaultPosition, wxDefaultSize,
+                    wxCAPTION | wxCLOSE_BOX)
+    {
+        const int width  = FromDIP(520);
+        const int indent = FromDIP(24);
+        auto     *main   = new wxBoxSizer(wxVERTICAL);
+
+        auto *head = new wxStaticText(this, wxID_ANY,
+                                      wxString::Format(_L_PLURAL("%d of the chosen filament presets is made for Bambu Lab printers.",
+                                                                 "%d of the chosen filament presets are made for Bambu Lab printers.",
+                                                                 scan.filaments),
+                                                       int(scan.filaments)));
+        head->SetFont(::Label::Body_14);
+        head->Wrap(width);
+        main->Add(head, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+        main->AddSpacer(FromDIP(12));
+
+        m_as_made = new wxRadioButton(this, wxID_ANY, _L("Import them as they are, for Bambu Lab printers only"),
+                                      wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
+        main->Add(m_as_made, 0, wxLEFT | wxRIGHT, FromDIP(16));
+        auto *as_made_note = new wxStaticText(this, wxID_ANY, _L("They show only while such a printer is set up and selected."));
+        as_made_note->Wrap(width - indent);
+        main->Add(as_made_note, 0, wxLEFT, FromDIP(16) + indent);
+        main->AddSpacer(FromDIP(10));
+
+        m_general = new wxRadioButton(this, wxID_ANY, _L("Make general presets for every printer taking 1.75 mm filament"));
+        main->Add(m_general, 0, wxLEFT | wxRIGHT, FromDIP(16));
+        auto *general_note = new wxStaticText(
+            this, wxID_ANY,
+            _L("One preset per material and colour variant. Temperatures, cooling, flow ratio, density and cost come from "
+               "the maker's preset for the printer below; Orca's generic preset of the material supplies everything that "
+               "depends on the printer. Process presets are left out. Calibrate a general preset on your printer before "
+               "relying on it."));
+        general_note->Wrap(width - indent);
+        main->Add(general_note, 0, wxLEFT, FromDIP(16) + indent);
+        main->AddSpacer(FromDIP(8));
+
+        auto *row     = new wxBoxSizer(wxHORIZONTAL);
+        auto *label   = new wxStaticText(this, wxID_ANY, _L("Values of the preset for:"));
+        m_model       = new wxChoice(this, wxID_ANY);
+        int preferred = 0;
+        for (const std::string &model : scan.models) {
+            if (model == "Bambu Lab X1 Carbon")
+                preferred = int(m_models.size());
+            m_models.push_back(model);
+            m_model->Append(from_u8(model));
+        }
+        if (!m_models.empty())
+            m_model->SetSelection(preferred);
+        row->Add(label, 0, wxALIGN_CENTER_VERTICAL);
+        row->AddSpacer(FromDIP(8));
+        row->Add(m_model, 1, wxALIGN_CENTER_VERTICAL);
+        main->Add(row, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16) + indent);
+        main->AddSpacer(FromDIP(14));
+
+        auto *buttons = new DialogButtons(this, {"OK", "Cancel"});
+        buttons->GetOK()->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { EndModal(wxID_OK); });
+        buttons->GetCANCEL()->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { EndModal(wxID_CANCEL); });
+        main->Add(buttons, 0, wxEXPAND);
+
+        // The notes as descriptions of the ways too: a screen reader reads
+        // them with the way.
+        m_as_made->SetToolTip(as_made_note->GetLabel());
+        m_general->SetToolTip(general_note->GetLabel());
+
+        // With a Bambu Lab printer set up here, the presets as they are serve
+        // it; else the general ones serve the printers that are.
+        (bambu_printer_here ? m_as_made : m_general)->SetValue(true);
+        m_model->Enable(m_general->GetValue());
+        auto choose = [this](wxCommandEvent &e) {
+            m_model->Enable(m_general->GetValue());
+            e.Skip();
+        };
+        m_as_made->Bind(wxEVT_RADIOBUTTON, choose);
+        m_general->Bind(wxEVT_RADIOBUTTON, choose);
+
+        SetSizer(main);
+        Layout();
+        Fit();
+        Centre(wxBOTH);
+        wxGetApp().UpdateDlgDarkUI(this);
+
+        // Start on the question, at the way chosen now. Deferred until the
+        // dialog is on screen: a control not shown yet may not keep the focus.
+        CallAfter([this]() { (m_general->GetValue() ? m_general : m_as_made)->SetFocus(); });
+    }
+
+    // The Bambu Lab model whose values the general presets take; empty to
+    // import the presets as they are.
+    std::string general_from() const
+    {
+        if (!m_general->GetValue())
+            return std::string();
+        const int selected = m_model->GetSelection();
+        return selected >= 0 && size_t(selected) < m_models.size() ? m_models[size_t(selected)] : std::string("Bambu Lab X1 Carbon");
+    }
+
+protected:
+    void on_dpi_changed(const wxRect &) override
+    {
+        Fit();
+        Refresh();
+    }
+
+private:
+    wxRadioButton           *m_as_made{nullptr};
+    wxRadioButton           *m_general{nullptr};
+    wxChoice                *m_model{nullptr};
+    std::vector<std::string> m_models;
+};
+
+// The details for ImportReportDialog: the general presets a general import
+// made, then a line for each file left out, with the reason, then the
+// printers that are not set up.
 wxString import_report_details(const PresetImportReport &report)
 {
     using Reason = PresetImportReport::Reason;
     wxString out;
+    // MakerBot / UltiMaker Fork: what a general import made comes first -- it
+    // is what the import was asked for.
+    if (!report.general.empty()) {
+        out += wxString::Format(_L("General presets for every printer taking 1.75 mm filament (%d):"), int(report.general.size())) + "\n";
+        for (const PresetImportReport::General &general : report.general) {
+            const wxString model = general.model.empty() ? _L("Bambu Lab printer") : from_u8(general.model);
+            wxString line = format_wxstr(general.variant ? _L("%1%: values for the %2% with changes of its own, the rest from %3%") :
+                                                           _L("%1%: values for the %2%, the rest from %3%"),
+                                         from_u8(general.name), model, from_u8(general.base));
+            if (general.other_model)
+                line += " " + _L("(no preset for the chosen printer)");
+            out += "  " + line + "\n";
+        }
+        if (report.general_merged > 0)
+            out += wxString::Format(_L_PLURAL("%d preset for other Bambu Lab printers went into these.",
+                                              "%d presets for other Bambu Lab printers went into these.", report.general_merged),
+                                    int(report.general_merged)) + "\n";
+        out += _L("Calibrate a general preset on your printer before relying on it.") + "\n";
+    }
+    if (report.general_not_filament > 0) {
+        if (!out.empty())
+            out += "\n";
+        out += wxString::Format(_L_PLURAL("%d process or printer preset for Bambu Lab printers was left out: a general import takes filament presets only.",
+                                          "%d process or printer presets for Bambu Lab printers were left out: a general import takes filament presets only.",
+                                          report.general_not_filament),
+                                int(report.general_not_filament)) + "\n";
+    }
     if (!report.skipped.empty()) {
+        if (!out.empty())
+            out += "\n";
         out += wxString::Format(_L("Not imported (%d):"), int(report.skipped.size())) + "\n";
         for (const PresetImportReport::Skipped &skipped : report.skipped) {
             wxString why;
@@ -3884,6 +4035,7 @@ wxString import_report_details(const PresetImportReport &report)
             case Reason::BaseMissing: why = wxString::Format(_L("its base preset \"%s\" is not installed"), from_u8(skipped.detail)); break;
             case Reason::Failed: why = _L("importing failed"); break;
             case Reason::NotAnArchive: why = _L("not a readable archive"); break;
+            case Reason::NoGenericBase: why = wxString::Format(_L("Orca has no generic preset for its type \"%s\""), from_u8(skipped.detail)); break;
             }
             if (skipped.reason == Reason::Failed && !skipped.detail.empty())
                 why += ": " + from_u8(skipped.detail);
@@ -3923,6 +4075,20 @@ void MainFrame::load_config_file()
         cfiles.push_back(into_u8(file));
         m_last_config = file;
     }
+    // MakerBot / UltiMaker Fork: filament presets made for Bambu Lab printers
+    // come in as they are or as general presets -- BambuImportDialog asks.
+    std::string             general_from;
+    const BambuFilamentScan bambu = wxGetApp().preset_bundle->scan_bambu_filaments(cfiles);
+    if (bambu.filaments > 0) {
+        bool bambu_printer_here = false;
+        for (const Preset &printer : wxGetApp().preset_bundle->printers.get_presets())
+            if (printer.is_visible && (boost::starts_with(printer.name, "Bambu Lab ") || boost::starts_with(printer.inherits(), "Bambu Lab ")))
+                bambu_printer_here = true;
+        BambuImportDialog ask(this, bambu, bambu_printer_here);
+        if (ask.ShowModal() != wxID_OK)
+            return;
+        general_from = ask.general_from();
+    }
     bool update = false;
     // MakerBot / UltiMaker Fork: what the import leaves out, for the dialog at
     // the end
@@ -3934,7 +4100,7 @@ void MainFrame::load_config_file()
             return std::find(ids, ids + 4, res) - ids;
         },
         ForwardCompatibilitySubstitutionRule::Enable,
-        *wxGetApp().app_config, &report);
+        *wxGetApp().app_config, &report, general_from);
     if (!cfiles.empty()) {
         wxGetApp().app_config->update_config_dir(get_dir_name(cfiles.back()));
         wxGetApp().load_current_presets();
@@ -3952,7 +4118,7 @@ void MainFrame::load_config_file()
         msg += _L("\nHint: Make sure you have added the corresponding printer before importing the configs.");
     // MakerBot / UltiMaker Fork: say what was left out and why, and for which
     // printers presets came in that are not set up here.
-    if (!report.skipped.empty() || !report.printers_missing.empty()) {
+    if (!report.skipped.empty() || !report.printers_missing.empty() || !report.general.empty() || report.general_not_filament > 0) {
         ImportReportDialog dlg(this, msg, import_report_details(report));
         dlg.ShowModal();
         return;
