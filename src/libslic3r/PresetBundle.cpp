@@ -1300,11 +1300,109 @@ bool PresetBundle::apply_vendor_config(
     return true;
 }
 
+// MakerBot / UltiMaker Fork: the last part of a path, after the last slash or
+// backslash, for the import report. The paths are UTF-8, which
+// boost::filesystem::path would read in the local code page on Windows.
+static std::string file_name_of(const std::string &path)
+{
+    const size_t slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+// MakerBot / UltiMaker Fork: note a file an import of presets leaves out, in
+// the log and in the report when there is one. Returns false, the result of
+// import_json_presets() for a file left out.
+static bool import_skipped(PresetImportReport *report, const std::string &source, const std::string &name,
+                           PresetImportReport::Reason reason, const std::string &detail = std::string())
+{
+    const char *why = "";
+    switch (reason) {
+    case PresetImportReport::Reason::Unreadable: why = "unreadable"; break;
+    case PresetImportReport::Reason::NotAPreset: why = "not a preset"; break;
+    case PresetImportReport::Reason::SystemName: why = "a system preset has this name"; break;
+    case PresetImportReport::Reason::KeptExisting: why = "the existing preset was kept"; break;
+    case PresetImportReport::Reason::BaseMissing: why = "base preset not installed"; break;
+    case PresetImportReport::Reason::Failed: why = "failed"; break;
+    case PresetImportReport::Reason::NotAnArchive: why = "not a readable archive"; break;
+    }
+    BOOST_LOG_TRIVIAL(warning) << "Preset import left out " << name << " (" << source << "): " << why
+                               << (detail.empty() ? "" : ": ") << detail;
+    if (report != nullptr)
+        report->skipped.push_back({source, name, reason, detail});
+    return false;
+}
+
+// MakerBot / UltiMaker Fork: the name of a preset file and the preset it
+// inherits, read ahead of an import for bases_first(). Both stay empty where
+// the text is no JSON object.
+struct PresetFileHead
+{
+    std::string name;
+    std::string inherits;
+};
+
+static PresetFileHead preset_file_head(const json &j)
+{
+    PresetFileHead head;
+    if (j.is_object()) {
+        const auto name     = j.find(BBL_JSON_KEY_NAME);
+        const auto inherits = j.find(BBL_JSON_KEY_INHERITS);
+        if (name != j.end() && name->is_string())
+            head.name = name->get<std::string>();
+        if (inherits != j.end() && inherits->is_string())
+            head.inherits = inherits->get<std::string>();
+    }
+    return head;
+}
+
+static PresetFileHead read_preset_file_head(const std::string &path)
+{
+    boost::nowide::ifstream ifs(path);
+    return preset_file_head(json::parse(ifs, nullptr, false));
+}
+
+static PresetFileHead read_preset_file_head(const char *begin, const char *end)
+{
+    return preset_file_head(json::parse(begin, end, nullptr, false));
+}
+
+// MakerBot / UltiMaker Fork: the order to import preset files in -- each
+// preset ahead of the presets that inherit it, otherwise as given. A preset
+// whose base is not in yet is left out ("can not find inherit preset"), and
+// Bambu Studio's filament bundles may list a colour variant ahead of the
+// preset it inherits: 11 of the 17 variants in Kingroon's bundles do
+// (counted on 2026-10-03). Presets inheriting each other in a circle keep
+// their order; they fail either way.
+static std::vector<size_t> bases_first(const std::vector<PresetFileHead> &heads)
+{
+    std::map<std::string, size_t> by_name;
+    for (size_t i = 0; i < heads.size(); ++i)
+        if (!heads[i].name.empty())
+            by_name.emplace(heads[i].name, i); // of equal names, the first
+    std::vector<size_t> order;
+    order.reserve(heads.size());
+    std::vector<char>           state(heads.size(), 0); // 0 open, 1 on the way, 2 placed
+    std::function<void(size_t)> place = [&](size_t i) {
+        if (state[i] != 0)
+            return;
+        state[i]        = 1;
+        const auto base = heads[i].inherits.empty() ? by_name.end() : by_name.find(heads[i].inherits);
+        if (base != by_name.end())
+            place(base->second);
+        state[i] = 2;
+        order.push_back(i);
+    };
+    for (size_t i = 0; i < heads.size(); ++i)
+        place(i);
+    return order;
+}
+
 // Import presets from UI control
 PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string> &              files,
                                                         std::function<int(std::string const &)> override_confirm,
                                                         ForwardCompatibilitySubstitutionRule    rule,
-                                                        AppConfig&                            config)
+                                                        AppConfig&                            config,
+                                                        PresetImportReport*                   report)
 {
     bundles.PauseRead(); // Pause threads from reading
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " entry";
@@ -1315,12 +1413,25 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
     if (user_id.empty())
         user_id = DEFAULT_USER_FOLDER_NAME;
     this->update_user_presets_directory(user_id);
-    for (auto &file : files) {
+    // MakerBot / UltiMaker Fork: the single preset files first, each base
+    // ahead of the presets that inherit it (bases_first()).
+    std::vector<std::string>    single_files;
+    std::vector<PresetFileHead> single_heads;
+    for (const std::string &file : files)
         if (Slic3r::is_json_file(file)) {
-            import_json_presets(substitutions, file, override_confirm, rule, overwrite, result);
+            single_files.push_back(file);
+            single_heads.push_back(read_preset_file_head(file));
         }
+    for (const size_t i : bases_first(single_heads))
+        import_json_presets(substitutions, single_files[i], override_confirm, rule, overwrite, result, std::string(), report,
+                            single_files[i]);
+    for (auto &file : files) {
         // Determine if it is a preset bundle
-        if (boost::iends_with(file, ".orca_printer") || boost::iends_with(file, ".orca_bundle") || boost::iends_with(file, ".orca_filament") || boost::iends_with(file, ".zip")) {
+        // MakerBot / UltiMaker Fork: Bambu Studio's bundles are zip archives
+        // like these -- .bbsflmt holds filament presets, .bbscfg a printer
+        // with its presets.
+        if (boost::iends_with(file, ".orca_printer") || boost::iends_with(file, ".orca_bundle") || boost::iends_with(file, ".orca_filament") || boost::iends_with(file, ".zip") ||
+            boost::iends_with(file, ".bbsflmt") || boost::iends_with(file, ".bbscfg")) {
             boost::system::error_code ec;
             // create user folder
             fs::path user_folder(data_dir() + "/" + PRESET_USER_DIR);
@@ -1347,7 +1458,14 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
             status        = mz_zip_reader_init_cfile(&zip_archive, zipFile, 0, MZ_ZIP_FLAG_CASE_SENSITIVE | MZ_ZIP_FLAG_IGNORE_PATH);
             if (MZ_FALSE == status) {
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " Failed to initialize reader ZIP archive";
-                return substitutions;
+                // MakerBot / UltiMaker Fork: on with the next file. Returning
+                // here left the presets paused (PauseRead()) and the file
+                // open, and the caller counted each chosen file as imported.
+                if (zipFile != nullptr)
+                    fclose(zipFile);
+                fs::remove_all(temp_folder, ec);
+                import_skipped(report, file, file_name_of(file), PresetImportReport::Reason::NotAnArchive);
+                continue;
             } else {
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " Success to initialize reader ZIP archive";
             }
@@ -1373,9 +1491,13 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
 
             // Build bundle directory path based on whether bundle_structure.json was present
             fs::path bundle_base_dir;
+            // MakerBot / UltiMaker Fork: whether this import makes the bundle's
+            // folder -- see below, where nothing came in.
+            bool     bundle_dir_is_new = false;
             if (has_bundle_structure) {
                 // Use the bundle ID from metadata when bundle_structure.json exists
                 bundle_base_dir = user_folder / user_id / PRESET_LOCAL_DIR / metadata.id;
+                bundle_dir_is_new = !fs::exists(bundle_base_dir);
                 if (!fs::exists(bundle_base_dir))
                     fs::create_directories(bundle_base_dir, ec);
                 if (ec)
@@ -1385,6 +1507,13 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
             }
 
             // Extract Files
+            // MakerBot / UltiMaker Fork: in two passes. The first reads the name
+            // and the base of each preset in the archive, the second extracts
+            // and imports them, each base ahead of the presets that inherit it
+            // (bases_first()).
+            std::vector<mz_uint>        entries;
+            std::vector<std::string>    entry_names;
+            std::vector<PresetFileHead> entry_heads;
             int num_files = mz_zip_reader_get_num_files(&zip_archive);
             for (int i = 0; i < num_files; i++) {
                 mz_zip_archive_file_stat file_stat;
@@ -1397,18 +1526,33 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
                         file_name = file_name.substr(index + 1);
                     }
                     if (BUNDLE_STRUCTURE_JSON_NAME == file_name) continue;
-                    // create target file path
-                    std::string target_file_path = boost::filesystem::path(temp_folder / file_name).make_preferred().string();
+                    // MakerBot / UltiMaker Fork: a folder, or a file that is no
+                    // JSON, holds no preset
+                    if (file_stat.m_is_directory || !Slic3r::is_json_file(file_name)) continue;
+                    size_t      size = 0;
+                    void       *data = mz_zip_reader_extract_to_heap(&zip_archive, i, &size, 0);
+                    const char *text = static_cast<const char *>(data);
+                    entry_heads.push_back(data != nullptr ? read_preset_file_head(text, text + size) : PresetFileHead());
+                    mz_free(data);
+                    entries.push_back(mz_uint(i));
+                    entry_names.push_back(file_name);
+                }
+            }
+            const size_t imported_before = result.size();
+            for (const size_t k : bases_first(entry_heads)) {
+                const std::string &file_name = entry_names[k];
+                // create target file path
+                std::string target_file_path = boost::filesystem::path(temp_folder / file_name).make_preferred().string();
 
-                    status = mz_zip_reader_extract_to_file(&zip_archive, i, encode_path(target_file_path.c_str()).c_str(), MZ_ZIP_FLAG_CASE_SENSITIVE);
-                    // target file is opened
-                    if (MZ_FALSE == status) {
-                        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " Failed to open target file: " << target_file_path;
-                    } else {
-                        bool is_success = import_json_presets(substitutions, target_file_path, override_confirm, rule, overwrite, result,
-                                                              has_bundle_structure ? bundle_base_dir.string() : std::string());
-                        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " import target file: " << target_file_path << " import result" << is_success;
-                    }
+                status = mz_zip_reader_extract_to_file(&zip_archive, entries[k], encode_path(target_file_path.c_str()).c_str(), MZ_ZIP_FLAG_CASE_SENSITIVE);
+                // target file is opened
+                if (MZ_FALSE == status) {
+                    BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " Failed to open target file: " << target_file_path;
+                    import_skipped(report, file, file_name, PresetImportReport::Reason::Unreadable);
+                } else {
+                    bool is_success = import_json_presets(substitutions, target_file_path, override_confirm, rule, overwrite, result,
+                                                          has_bundle_structure ? bundle_base_dir.string() : std::string(), report, file);
+                    BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " import target file: " << target_file_path << " import result" << is_success;
                 }
             }
 
@@ -1417,6 +1561,14 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
                 metadata.imported_time = std::time(nullptr);
             }
 
+            // MakerBot / UltiMaker Fork: a new bundle none of whose presets came
+            // in is no bundle. Its folder goes again, rather than an empty
+            // bundle being listed.
+            if (has_bundle_structure && bundle_dir_is_new && result.size() == imported_before) {
+                fs::remove_all(bundle_base_dir, ec);
+                if (ec) BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << " remove directory failed: " << ec.message();
+                has_bundle_structure = false;
+            }
             // Only save bundle_metadata.json for bundles (when bundle_structure.json was present)
             if (has_bundle_structure) {
                 // Save metadata to bundle_metadata.json
@@ -1437,10 +1589,35 @@ PresetsConfigSubstitutions PresetBundle::import_presets(std::vector<std::string>
                 }
             }
 
+            // MakerBot / UltiMaker Fork: frees what miniz read of the archive;
+            // the file stays open for fclose()
+            mz_zip_reader_end(&zip_archive);
             fclose(zipFile);
             if (fs::exists(temp_folder)) fs::remove_all(temp_folder, ec);
             if (ec) BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << " remove directory failed: " << ec.message();
+        } else if (!Slic3r::is_json_file(file)) {
+            // MakerBot / UltiMaker Fork: neither a preset file nor an archive
+            // of presets -- it used to be passed over without a word.
+            import_skipped(report, file, file_name_of(file), PresetImportReport::Reason::NotAPreset);
         }
+    }
+    // MakerBot / UltiMaker Fork: of the printers the imported presets are made
+    // for, the report keeps those not set up here -- no visible printer preset
+    // of that name, and none of the user's own printers derived from one,
+    // which the presets would show for too (is_compatible_with_printer()).
+    if (report != nullptr) {
+        std::vector<std::string> &named = report->printers_missing;
+        std::sort(named.begin(), named.end());
+        named.erase(std::unique(named.begin(), named.end()), named.end());
+        named.erase(std::remove_if(named.begin(), named.end(),
+                                   [this](const std::string &printer_name) {
+                                       for (const Preset &printer : this->printers.get_presets())
+                                           if (printer.is_visible &&
+                                               (printer.name == printer_name || (!printer.is_system && printer.inherits() == printer_name)))
+                                               return true;
+                                       return false;
+                                   }),
+                    named.end());
     }
     bundles.UnpauseRead();
     files = result;
@@ -1453,8 +1630,17 @@ bool PresetBundle::import_json_presets(PresetsConfigSubstitutions &            s
                                        ForwardCompatibilitySubstitutionRule    rule,
                                        int &                                   overwrite,
                                        std::vector<std::string> &              result,
-                                       const std::string &                     bundle_dir)
+                                       const std::string &                     bundle_dir,
+                                       PresetImportReport *                    report,
+                                       const std::string &                     report_source)
 {
+    // MakerBot / UltiMaker Fork: a file that does not come in goes into the
+    // report, with the reason (import_skipped()).
+    std::string name;
+    auto        skipped = [&](PresetImportReport::Reason reason, const std::string &detail = std::string()) {
+        return import_skipped(report, report_source.empty() ? file : report_source, name.empty() ? file_name_of(file) : name,
+                              reason, detail);
+    };
     try {
         DynamicPrintConfig config;
         // BBS: change to json format
@@ -1462,10 +1648,11 @@ bool PresetBundle::import_json_presets(PresetsConfigSubstitutions &            s
         std::map<std::string, std::string> key_values;
         std::string                        reason;
         ConfigSubstitutions                config_substitutions = config.load_from_json(file, rule, key_values, reason);
-        std::string                        name                 = key_values[BBL_JSON_KEY_NAME];
+        name = key_values[BBL_JSON_KEY_NAME]; // MakerBot / UltiMaker Fork: declared above, for the report
         std::string                        version_str          = key_values[BBL_JSON_KEY_VERSION];
         boost::optional<Semver>            version              = Semver::parse(version_str);
-        if (!version) return false;
+        if (!reason.empty()) return skipped(PresetImportReport::Reason::Unreadable);
+        if (!version) return skipped(PresetImportReport::Reason::NotAPreset);
 
         std::string type_subdir;    // also note the type subdir for bundles
         PresetCollection *collection = nullptr;
@@ -1483,7 +1670,7 @@ bool PresetBundle::import_json_presets(PresetsConfigSubstitutions &            s
         }
         if (collection == nullptr) {
             BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << " Preset type is unknown, not loading: " << name;
-            return false;
+            return skipped(PresetImportReport::Reason::NotAPreset);
         }
         const PresetOrigin load_origin = detect_origin_from_path(boost::filesystem::path(bundle_dir));
         const std::string      preset_name = get_preset_canonical_name(name, load_origin);
@@ -1492,20 +1679,37 @@ bool PresetBundle::import_json_presets(PresetsConfigSubstitutions &            s
         if (auto p = collection->find_preset(preset_name, false)) {
             if (p->is_default || p->is_system) {
                 BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << " Preset already present and is system preset, not loading: " << preset_name;
-                return false;
+                return skipped(PresetImportReport::Reason::SystemName);
             }
             if (overwrite != 2 && overwrite != 3) overwrite = override_confirm(preset_name); //3: yes to all  2: no to all
         }
         if (overwrite == 0 || overwrite == 2) {
             BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << " Preset already present, not loading: " << preset_name;
-            return false;
+            return skipped(PresetImportReport::Reason::KeptExisting);
         }
 
         DynamicPrintConfig new_config;
         Preset *           inherit_preset  = nullptr;
         ConfigOption *     inherits_config = config.option(BBL_JSON_KEY_INHERITS);
         std::string        inherits_value;
-        if (inherits_config) {
+        // MakerBot / UltiMaker Fork: in a bundle, a preset may inherit another
+        // preset of the same bundle -- Bambu Studio's colour variants do. Orca
+        // keeps a bundle's presets under the bundle's name ("_local/<id>/..."),
+        // so the base is looked up there first. The preset then comes in with
+        // the base's values and its own, inheriting nothing: Orca loads a
+        // bundle's presets from one folder in one pass and would not find the
+        // base on the next start (PresetCollection::load_presets()).
+        const Preset *bundle_base = nullptr;
+        if (inherits_config && load_origin.is_bundle()) {
+            const auto *option_str = dynamic_cast<const ConfigOptionString *>(inherits_config);
+            if (option_str != nullptr && !option_str->value.empty())
+                bundle_base = collection->find_preset(get_preset_canonical_name(option_str->value, load_origin), false, true);
+        }
+        // As an inheriting preset would on loading, it takes the base's
+        // filament_id where it has none. Copied now: inserting the preset
+        // below may move the base.
+        const std::string bundle_base_filament_id = bundle_base != nullptr ? bundle_base->filament_id : std::string();
+        if (inherits_config && bundle_base == nullptr) {
             ConfigOptionString *option_str = dynamic_cast<ConfigOptionString *>(inherits_config);
             inherits_value                 = option_str->value;
             inherit_preset                 = collection->find_preset2(inherits_value, true);
@@ -1513,7 +1717,11 @@ bool PresetBundle::import_json_presets(PresetsConfigSubstitutions &            s
             if (inherit_preset)
                 inherits_value = inherit_preset->name;  // keep the base_id redo below in sync
         }
-        if (inherit_preset) {
+        if (bundle_base != nullptr) {
+            new_config = bundle_base->config;
+            new_config.apply(std::move(config));
+            Preset::inherits(new_config).clear();
+        } else if (inherit_preset) {
             new_config = inherit_preset->config;
             new_config.apply(std::move(config));
         } else {
@@ -1522,7 +1730,7 @@ bool PresetBundle::import_json_presets(PresetsConfigSubstitutions &            s
             if (inherits_config2 && !inherits_config2->value.empty()) {
                 // we should skip this preset here
                 BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(", can not find inherit preset for user preset %1%, just skip") % name;
-                return false;
+                return skipped(PresetImportReport::Reason::BaseMissing, inherits_config2->value);
             }
             // Find a default preset for the config. The PrintPresetCollection provides different default preset based on the "printer_technology" field.
             const Preset &default_preset = collection->default_preset_for(config);
@@ -1535,6 +1743,8 @@ bool PresetBundle::import_json_presets(PresetsConfigSubstitutions &            s
         preset.bundle_id = load_origin.bundle_id;
         if (key_values.find(BBL_JSON_KEY_FILAMENT_ID) != key_values.end())
             preset.filament_id = key_values[BBL_JSON_KEY_FILAMENT_ID];
+        else if (!bundle_base_filament_id.empty()) // MakerBot / UltiMaker Fork, see above
+            preset.filament_id = bundle_base_filament_id;
         preset.is_external = true;
         preset.version     = *version;
         inherit_preset     = collection->find_preset(inherits_value, false, true); // pointer maybe wrong after insert, redo find
@@ -1557,19 +1767,27 @@ bool PresetBundle::import_json_presets(PresetsConfigSubstitutions &            s
         if (!bundle_dir.empty()) {
             if (!save_preset_to_bundle_dir(preset, collection, load_origin.bundle_id, type_subdir, bundle_dir)) {
                 BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << " Failed to save preset " << preset_name << " to bundle directory";
-                return false;
+                return skipped(PresetImportReport::Reason::Failed);
             }
         } else {
             preset.save(inherit_preset ? &inherit_preset->config : nullptr);
         }
 
+        // MakerBot / UltiMaker Fork: the printers this preset is made for, to
+        // the report; import_presets() keeps those not set up here.
+        if (report != nullptr && collection != &this->printers)
+            if (const auto *made_for = preset.config.option<ConfigOptionStrings>("compatible_printers"))
+                report->printers_missing.insert(report->printers_missing.end(), made_for->values.begin(), made_for->values.end());
+
         result.push_back(file);
     } catch (const std::ifstream::failure &err) {
         ++m_errors;
         BOOST_LOG_TRIVIAL(error) << boost::format("The config cannot be loaded: %1%. Reason: %2%") % file % err.what();
+        return skipped(PresetImportReport::Reason::Failed, err.what()); // MakerBot / UltiMaker Fork
     } catch (const std::runtime_error &err) {
         ++m_errors;
         BOOST_LOG_TRIVIAL(error) << boost::format("Failed importing config file: %1%. Reason: %2%") % file % err.what();
+        return skipped(PresetImportReport::Reason::Failed, err.what()); // MakerBot / UltiMaker Fork
     }
     return true;
 }

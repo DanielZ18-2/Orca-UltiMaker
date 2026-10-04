@@ -147,6 +147,34 @@ struct PresetBundleMetadata
     }
 };
 
+// MakerBot / UltiMaker Fork: what an import of preset files left out, and for
+// which printers it brought presets that are not set up here. Filled by
+// PresetBundle::import_presets() when the caller passes one; read by the
+// result dialog of "Import Configs".
+struct PresetImportReport
+{
+    enum class Reason {
+        Unreadable,   // damaged, or no JSON
+        NotAPreset,   // neither a printer, a filament nor a process preset
+        SystemName,   // a system preset has this name
+        KeptExisting, // the user kept the existing preset of this name
+        BaseMissing,  // the preset it inherits (detail) is not installed
+        Failed,       // importing or saving failed (detail: the error)
+        NotAnArchive, // a chosen archive that cannot be opened
+    };
+    struct Skipped
+    {
+        std::string source; // the chosen file
+        std::string name;   // the preset, or the file where it has no name
+        Reason      reason;
+        std::string detail;
+    };
+    std::vector<Skipped>     skipped;
+    // Printers named in compatible_printers of the imported presets and not
+    // set up here. Until one of them is, Orca does not show these presets.
+    std::vector<std::string> printers_missing;
+};
+
 // Bundle of Print + Filament + Printer presets.
 class PresetBundle
 {
@@ -199,18 +227,25 @@ public:
                                                          const BundleMetadata& remote_metadata,
                                                          ForwardCompatibilitySubstitutionRule rule);
 
+    // MakerBot / UltiMaker Fork: report, when given, collects what the import
+    // left out and the printers it brought presets for that are not set up.
     PresetsConfigSubstitutions import_presets(std::vector<std::string>& files,
                                               std::function<int(std::string const&)> override_confirm,
                                               ForwardCompatibilitySubstitutionRule rule,
-                                              AppConfig& config);
+                                              AppConfig& config,
+                                              PresetImportReport* report = nullptr);
 
+    // MakerBot / UltiMaker Fork: a file left out goes into report, when
+    // given, under report_source (the file the user chose; default: file).
     bool import_json_presets(PresetsConfigSubstitutions& substitutions,
                              std::string& file,
                              std::function<int(std::string const&)> override_confirm,
                              ForwardCompatibilitySubstitutionRule rule,
                              int& overwrite,
                              std::vector<std::string>& result,
-                             const std::string& bundle_dir = "");
+                             const std::string& bundle_dir = "",
+                             PresetImportReport* report = nullptr,
+                             const std::string& report_source = "");
                              
     void save_user_presets(AppConfig& config, std::map<std::string, std::string>& need_to_delete_list);
     void check_and_fix_user_presets_syncinfo(const std::string& user_id);
