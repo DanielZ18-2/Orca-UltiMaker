@@ -3367,6 +3367,23 @@ size_t PresetCollection::update_compatible_internal(const PresetWithVendorProfil
     const ConfigOption *opt = active_printer.preset.config.option("nozzle_diameter");
     if (opt)
         config.set_key_value("num_extruders", new ConfigOptionInt((int)static_cast<const ConfigOptionFloats*>(opt)->values.size()));
+    // MakerBot / UltiMaker Fork: for compatible_printers_condition of filament
+    // presets, the diameter of the filament the printer takes. Orca keeps no
+    // such printer setting; it is read from the printer's own default
+    // filament preset as saved, the signal PresetBundle::load_selections()
+    // guards the remembered filaments with. 0 where there is none. The general
+    // presets "Import Configs" makes from presets for Bambu Lab printers show
+    // where it is 1.75 (PresetBundle::GENERAL_IMPORT_CONDITION).
+    if (m_type == Preset::TYPE_FILAMENT) {
+        double      filament_diameter = 0.;
+        const auto *defaults          = active_printer.preset.config.option<ConfigOptionStrings>("default_filament_profile");
+        if (defaults != nullptr && !defaults->values.empty())
+            if (const Preset *filament = this->find_preset(defaults->values.front(), false, true))
+                if (const auto *diameters = filament->config.option<ConfigOptionFloats>("filament_diameter");
+                    diameters != nullptr && !diameters->values.empty())
+                    filament_diameter = diameters->values.front();
+        config.set_key_value("printer_filament_diameter", new ConfigOptionFloat(filament_diameter));
+    }
     int some_compatible = 0;
 
     if (active_print)
