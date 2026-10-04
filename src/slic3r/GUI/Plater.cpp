@@ -5598,7 +5598,14 @@ struct Plater::priv
         }
         return res;
     }
-    void reset_project_dirty_after_save() { m_undo_redo_stack_main.mark_current_as_saved(); dirty_state.reset_after_save(); }
+    void reset_project_dirty_after_save()
+    {
+        // MakerBot / UltiMaker Fork: saved, or a new project -- either way no
+        // geometry import is left unsaved.
+        geometry_import_unsaved = false;
+        m_undo_redo_stack_main.mark_current_as_saved();
+        dirty_state.reset_after_save();
+    }
     void reset_project_dirty_initial_presets() { dirty_state.reset_initial_presets(); }
 
 #if ENABLE_PROJECT_DIRTY_STATE_DEBUG_WINDOW
@@ -5691,6 +5698,11 @@ struct Plater::priv
     // were taken into the presets -- the file was read as a project, not as
     // geometry alone. load_project() clears it before it loads.
     bool last_3mf_was_project{false};
+    // MakerBot / UltiMaker Fork: the plate holds what load_project() took out
+    // of a 3MF as geometry only. No file holds it -- the 3MF did not become
+    // the project -- so the project counts as modified until it is saved,
+    // whatever the undo / redo stack says. Cleared by reset() and by saving.
+    bool geometry_import_unsaved{false};
     std::vector<size_t> load_model_objects(const ModelObjectPtrs& model_objects, bool allow_negative_z = false, bool split_object = false, bool auto_drop = true);
 
     fs::path get_export_file_path(GUI::FileType file_type);
@@ -9080,6 +9092,10 @@ void Plater::priv::delete_all_objects_from_model()
 
 void Plater::priv::reset(bool apply_presets_change)
 {
+    // MakerBot / UltiMaker Fork: an empty plate holds no geometry import.
+    // Cleared before the snapshot below, which works out the dirty state.
+    geometry_import_unsaved = false;
+
     Plater::TakeSnapshot snapshot(q, "Reset Project", UndoRedo::SnapshotType::ProjectSeparator);
 
     clear_warnings();
@@ -13246,7 +13262,8 @@ void Plater::priv::take_snapshot(const std::string& snapshot_name, const UndoRed
     //BBS: add PartPlateList as the paremeter for take_snapshot
     this->undo_redo_stack().release_least_recently_used();
 
-    dirty_state.update_from_undo_redo_stack(m_undo_redo_stack_main.project_modified());
+    // MakerBot / UltiMaker Fork: see geometry_import_unsaved.
+    dirty_state.update_from_undo_redo_stack(m_undo_redo_stack_main.project_modified() || geometry_import_unsaved);
 
     // Save the last active preset name of a particular printer technology.
     ((this->printer_technology == ptFFF) ? m_last_fff_printer_profile_name : m_last_sla_printer_profile_name) = wxGetApp().preset_bundle->printers.get_selected_preset_name();
@@ -13442,7 +13459,8 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
             view3D->get_canvas3d()->force_main_toolbar_left_action(view3D->get_canvas3d()->get_main_toolbar_item_id("layersediting"));
     }
 
-    dirty_state.update_from_undo_redo_stack(m_undo_redo_stack_main.project_modified());
+    // MakerBot / UltiMaker Fork: see geometry_import_unsaved.
+    dirty_state.update_from_undo_redo_stack(m_undo_redo_stack_main.project_modified() || geometry_import_unsaved);
     update_title_dirty_status();
 }
 
@@ -13852,12 +13870,20 @@ void Plater::load_project(wxString const& filename2,
     // MakerBot / UltiMaker Fork: a geometry import is not a saved project --
     // no file holds it (see where the plate is named above). Marked as saved,
     // closing Orca or opening the next project would not offer to save it,
-    // where after an imported STL they do. reset() above dropped the saved
-    // mark, so the undo/redo stack now says what it says for an import.
+    // where after an imported STL they do.
+    //
+    // Setting the dirty flag once was not enough: the "Load Project" snapshot
+    // above counts as saved, and every later snapshot -- a click into the 3D
+    // view takes one -- asked the undo / redo stack again and cleared it.
+    // Ctrl+S then did nothing, since MainFrame::can_save() asks
+    // is_project_dirty(), while Ctrl+N, which asks up_to_date(), still
+    // offered to save. geometry_import_unsaved keeps it dirty until saved.
     if (!load_restore && !geometry_only)
         up_to_date(true, false);
-    else
+    else {
+        p->geometry_import_unsaved = geometry_only && !res.empty();
         p->dirty_state.update_from_undo_redo_stack(true);
+    }
     up_to_date(true, true);
 
     wxGetApp().params_panel()->switch_to_object_if_has_object_configs();
