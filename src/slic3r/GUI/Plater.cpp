@@ -7226,8 +7226,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                                 _L("%s is set up for %d filaments, and this printer holds one. Everything is "
                                    "printed with filament 1; the file itself is not changed."),
                                 from_path(path.filename()), size);
+                            // A warning, not a regular notification: those
+                            // fade out after ten seconds, too soon to read
+                            // for some, and this one says the colours of the
+                            // file are gone. A warning stays until closed.
                             notification_manager->push_notification(NotificationType::CustomNotification,
-                                                                    NotificationManager::NotificationLevel::RegularNotificationLevel,
+                                                                    NotificationManager::NotificationLevel::WarningNotificationLevel,
                                                                     std::string(note.ToUTF8().data()));
                             size = 1;
                         }
