@@ -797,6 +797,26 @@ static bool printer_model_is_makerbot_or_ultimaker(const PresetBundle &bundle, c
     return false;
 }
 
+// MakerBot / UltiMaker Fork: can every selected filament be printed on this
+// plate? Print::validate() refuses a plate whose temperature is 0 for one of
+// the filaments ("Plate %d: %s does not support filament %s"). This asks the
+// same of the filaments selected now, before anything is sliced.
+static bool plate_fits_selected_filaments(const PresetBundle &bundle, BedType plate)
+{
+    const std::string key = get_bed_temp_key(plate);
+    if (key.empty())
+        return true;
+    for (const std::string &name : bundle.filament_presets) {
+        const Preset *filament = bundle.filaments.find_preset(name, false);
+        if (filament == nullptr)
+            continue;
+        const ConfigOptionInts *temps = filament->config.option<ConfigOptionInts>(key);
+        if (temps != nullptr && !temps->values.empty() && temps->values.front() == 0)
+            return false;
+    }
+    return true;
+}
+
 // MakerBot / UltiMaker Fork: how many filaments the selected machine can hold
 // at once, or 0 when that is not known. The geometry import renumbers a model
 // down to this number, so a number is only given where it is certain:
@@ -3557,6 +3577,26 @@ void Sidebar::update_all_preset_comboboxes()
                     int bed_type_value = atoi(str_bed_type.c_str());
                     if (bed_type_value <= 0 || bed_type_value >= btCount) {
                         bed_type_value = preset_bundle.printers.get_edited_preset().get_default_bed_type(&preset_bundle);
+                    }
+                    // MakerBot / UltiMaker Fork: the plate remembered for this
+                    // printer is used only if the selected filaments can be
+                    // printed on it; otherwise the plate its profile names.
+                    // Orca remembers a plate for every printer it has shown,
+                    // not only for one where the user chose a plate, and
+                    // prefers it to default_bed_type from then on. A plate
+                    // remembered while a profile still named Cool Plate --
+                    // until 2026-08-28, 37 of the 46 MakerBot profiles did,
+                    // and no MakerBot filament has a Cool Plate temperature --
+                    // outlived the profile fix: the Replicator 2X came up on
+                    // Cool Plate, and no filament could be printed.
+                    else if (printer_model_is_makerbot_or_ultimaker(preset_bundle, cfg) &&
+                             !plate_fits_selected_filaments(preset_bundle, BedType(bed_type_value))) {
+                        const BedType profile_plate = preset_bundle.printers.get_edited_preset().get_default_bed_type(&preset_bundle);
+                        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": plate " << bed_type_value << " remembered for "
+                                                << preset_bundle.printers.get_selected_preset_name()
+                                                << " does not fit the selected filaments, plate " << int(profile_plate)
+                                                << " from the profile used";
+                        bed_type_value = int(profile_plate);
                     }
 
                    set_bed_type_accord_combox((BedType) bed_type_value);
