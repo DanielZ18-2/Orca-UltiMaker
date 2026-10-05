@@ -3823,20 +3823,28 @@ namespace {
 // MakerBot / UltiMaker Fork: the result of "Import Configs" when files were
 // left out, or presets came in for printers that are not set up here. The
 // details sit in a read-only text box: it scrolls, a screen reader reads it,
-// and it can be copied.
+// and it can be copied. A note to heed before using the presets, where there
+// is one, stands in bold right under the summary.
 class ImportReportDialog : public DPIDialog
 {
 public:
-    ImportReportDialog(wxWindow *parent, const wxString &summary, const wxString &details)
+    ImportReportDialog(wxWindow *parent, const wxString &summary, const wxString &details, const wxString &note = wxString())
         : DPIDialog(parent, wxID_ANY, _L("Import result"), wxDefaultPosition, wxDefaultSize,
                     wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER)
     {
         auto *main = new wxBoxSizer(wxVERTICAL);
 
+        // Not wrapped: the window takes the width of the summary, which
+        // keeps the note the second line.
         auto *head = new wxStaticText(this, wxID_ANY, summary);
         head->SetFont(::Label::Body_14);
-        head->Wrap(FromDIP(560));
         main->Add(head, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+        if (!note.empty()) {
+            auto *heed = new wxStaticText(this, wxID_ANY, note);
+            heed->SetFont(::Label::Head_14);
+            main->AddSpacer(FromDIP(6));
+            main->Add(heed, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
+        }
         main->AddSpacer(FromDIP(10));
 
         auto *text = new wxTextCtrl(this, wxID_ANY, details, wxDefaultPosition, wxSize(FromDIP(560), FromDIP(280)),
@@ -4011,7 +4019,6 @@ wxString import_report_details(const PresetImportReport &report)
             out += wxString::Format(_L_PLURAL("%d preset for other Bambu Lab printers went into these.",
                                               "%d presets for other Bambu Lab printers went into these.", report.general_merged),
                                     int(report.general_merged)) + "\n";
-        out += _L("Calibrate a general preset on your printer before relying on it.") + "\n";
     }
     if (report.general_not_filament > 0) {
         if (!out.empty())
@@ -4119,7 +4126,11 @@ void MainFrame::load_config_file()
     // MakerBot / UltiMaker Fork: say what was left out and why, and for which
     // printers presets came in that are not set up here.
     if (!report.skipped.empty() || !report.printers_missing.empty() || !report.general.empty() || report.general_not_filament > 0) {
-        ImportReportDialog dlg(this, msg, import_report_details(report));
+        // A general preset is a start, no more: the note says so in bold,
+        // right under the summary.
+        ImportReportDialog dlg(this, msg, import_report_details(report),
+                               report.general.empty() ? wxString() :
+                                                        _L("Calibrate a general preset on your printer before relying on it."));
         dlg.ShowModal();
         return;
     }
