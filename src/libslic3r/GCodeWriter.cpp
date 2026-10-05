@@ -101,7 +101,8 @@ std::string GCodeWriter::preamble()
         FLAVOR_IS(gcfMakerBotBirdwing) ||
         FLAVOR_IS(gcfMakerBotLava) ||
         FLAVOR_IS(gcfGriffin) ||
-        FLAVOR_IS(gcfCheetah))
+        FLAVOR_IS(gcfCheetah) ||
+        FLAVOR_IS(gcfUltiGCode))
     {
         if (this->config.use_relative_e_distances) {
             gcode << "M83 ; use relative distances for extrusion\n";
@@ -123,6 +124,12 @@ std::string GCodeWriter::postamble() const
 }
 
 std::string GCodeWriter::set_temperature(unsigned int temperature, GCodeFlavor flavor, bool wait, int tool, std::string comment){
+    // MakerBot / UltiMaker Fork: an UltiGCode machine heats from the material
+    // settings on the printer before it starts the file, and a temperature in
+    // the file would override them. Cura writes no M104, M109, M140 or M190
+    // for it.
+    if (flavor == gcfUltiGCode)
+        return "";
     if (wait && (flavor == gcfMakerBotLegacy || flavor == gcfMakerWare || flavor == gcfSailfish))
         return "";
 
@@ -175,6 +182,9 @@ std::string GCodeWriter::set_temperature(unsigned int temperature, bool wait, in
 // BBS
 std::string GCodeWriter::set_bed_temperature(int temperature, bool wait)
 {
+    // MakerBot / UltiMaker Fork: see set_temperature().
+    if (FLAVOR_IS(gcfUltiGCode))
+        return std::string();
     if (temperature == m_last_bed_temperature && (! wait || m_last_bed_temperature_reached))
         return std::string();
 
@@ -1003,6 +1013,28 @@ bool GCodeWriter::will_move_z(double z) const
     return true;
 }
 
+// MakerBot / UltiMaker Fork: the E value as written. UltiGCode counts E in mm3
+// of material -- the machine knows the diameter of the filament it holds (Cura
+// 5.13 for the UltiMaker 2+: the last E is 3306.66, the head says ;MATERIAL:3306).
+// Orca keeps counting mm of filament inside, for the statistics, the
+// retraction and the placeholders, so the conversion happens here, on output,
+// and nowhere else. Absolute or relative, E times the cross section is the
+// right map, and G92 E0 stays 0.
+double GCodeWriter::output_e() const
+{
+    const Extruder *f = filament();
+    return FLAVOR_IS(gcfUltiGCode) ? f->E() * f->filament_crossection() : f->E();
+}
+
+// MakerBot / UltiMaker Fork: UltiGCode retracts in the machine, G10/G11 with
+// the retraction set for the material on the printer. The dialect decides,
+// not the setting: Cura writes G10/G11 for these machines although
+// machine_firmware_retract is false in every one of its definitions.
+bool GCodeWriter::firmware_retraction() const
+{
+    return this->config.use_firmware_retraction || FLAVOR_IS(gcfUltiGCode);
+}
+
 std::string GCodeWriter::extrude_to_xy(const Vec2d &point, double dE, const std::string &comment, bool force_no_extrusion)
 {
     m_pos(0) = point(0);
@@ -1019,7 +1051,7 @@ std::string GCodeWriter::extrude_to_xy(const Vec2d &point, double dE, const std:
     GCodeG1Formatter w;
     w.emit_xy(point_on_plate);
     if (!force_no_extrusion)
-        w.emit_e(filament()->E());
+        w.emit_e(this->output_e());
     //BBS
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     return w.string();
@@ -1041,7 +1073,7 @@ std::string GCodeWriter::extrude_arc_to_xy(const Vec2d& point, const Vec2d& cent
     w.emit_xy(point_on_plate);
     w.emit_ij(center_offset);
     if (!force_no_extrusion)
-        w.emit_e(filament()->E());
+        w.emit_e(this->output_e());
     //BBS
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     return w.string();
@@ -1068,7 +1100,7 @@ std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, double dE, const std
     else
         w.emit_xy(Vec2d(point_on_plate.x(), point_on_plate.y()));
     if (!force_no_extrusion)
-        w.emit_e(filament()->E());
+        w.emit_e(this->output_e());
     //BBS
     w.emit_comment(GCodeWriter::full_gcode_comment, comment);
     return w.string();
@@ -1101,18 +1133,18 @@ std::string GCodeWriter::_retract(double length, double restart_extra, const std
     /*  If firmware retraction is enabled, we use a fake value of 1
     since we ignore the actual configured retract_length which
     might be 0, in which case the retraction logic gets skipped. */
-    if (this->config.use_firmware_retraction)
+    if (this->firmware_retraction())
         length = 1;
 
     std::string gcode;
     if (double dE = filament()->retract(length, restart_extra);  !is_zero(dE)) {
-        if (this->config.use_firmware_retraction) {
+        if (this->firmware_retraction()) {
             gcode = FLAVOR_IS(gcfMachinekit) ? "G22 ; retract\n" : "G10 ; retract\n";
         }
         else {
             // BBS
             GCodeG1Formatter w;
-            w.emit_e(filament()->E());
+            w.emit_e(this->output_e());
             w.emit_f(filament()->retract_speed() * 60.);
             // BBS
             w.emit_comment(GCodeWriter::full_gcode_comment, comment);
@@ -1134,7 +1166,7 @@ std::string GCodeWriter::unretract()
         gcode = "M101 ; extruder on\n";
 
     if (double dE = filament()->unretract(); !is_zero(dE)) {
-        if (this->config.use_firmware_retraction) {
+        if (this->firmware_retraction()) {
             gcode += FLAVOR_IS(gcfMachinekit) ? "G23 ; unretract\n" : "G11 ; unretract\n";
             gcode += this->reset_e();
         }
@@ -1142,7 +1174,7 @@ std::string GCodeWriter::unretract()
             //BBS
             // use G1 instead of G0 because G0 will blend the restart with the previous travel move
             GCodeG1Formatter w;
-            w.emit_e(filament()->E());
+            w.emit_e(this->output_e());
             w.emit_f(filament()->deretract_speed() * 60.);
             //BBS
             w.emit_comment(GCodeWriter::full_gcode_comment, " ; unretract");

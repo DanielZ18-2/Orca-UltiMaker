@@ -973,6 +973,9 @@ class Print;
         // Unretract
         void process_G11(const GCodeReader::GCodeLine& line);
 
+        // MakerBot / UltiMaker Fork: the move that G10 and G11 stand for
+        void process_firmware_retraction(double length, double speed);
+
         // Set Units to Inches
         void process_G20(const GCodeReader::GCodeLine& line);
 

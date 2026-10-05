@@ -182,7 +182,8 @@ static t_config_enum_values s_keys_map_GCodeFlavor {
     { "makerbot_birdwing", gcfMakerBotBirdwing },
     { "makerbot_lava",     gcfMakerBotLava     },
     { "griffin",           gcfGriffin        },
-    { "cheetah",           gcfCheetah        }
+    { "cheetah",           gcfCheetah        },
+    { "ultigcode",         gcfUltiGCode      }
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(GCodeFlavor)
 
@@ -4027,11 +4028,13 @@ void PrintConfigDef::init_fff_params()
     def->enum_values.push_back("makerbot_lava");
     def->enum_values.push_back("griffin");
     def->enum_values.push_back("cheetah");
+    def->enum_values.push_back("ultigcode");
     def->enum_labels.push_back(L("MakerBot Legacy (.x3g)"));
     def->enum_labels.push_back(L("MakerBot Birdwing (.makerbot)"));
     def->enum_labels.push_back(L("MakerBot Lava / Method (.makerbot)"));
     def->enum_labels.push_back(L("Griffin (.ufp)"));
     def->enum_labels.push_back(L("Cheetah (.ufp)"));
+    def->enum_labels.push_back(L("UltiGCode (.gcode)"));
     //def->enum_labels.push_back("RepRap/Sprinter");
     //def->enum_labels.push_back("Teacup");
     //def->enum_labels.push_back("MakerWare (MakerBot)");
@@ -10618,7 +10621,9 @@ std::map<std::string, std::string> validate(const FullPrintConfig &cfg, bool und
         cfg.gcode_flavor.value != gcfMarlinLegacy &&
         cfg.gcode_flavor.value != gcfMarlinFirmware &&
         cfg.gcode_flavor.value != gcfMachinekit &&
-        cfg.gcode_flavor.value != gcfRepetier)
+        cfg.gcode_flavor.value != gcfRepetier &&
+        // MakerBot / UltiMaker Fork: UltiGCode always retracts in the machine.
+        cfg.gcode_flavor.value != gcfUltiGCode)
         error_message.emplace("use_firmware_retraction","--use-firmware-retraction is only supported by Klipper, Marlin, Smoothie, RepRapFirmware, Repetier and Machinekit firmware");
 
     if (cfg.use_firmware_retraction.value)

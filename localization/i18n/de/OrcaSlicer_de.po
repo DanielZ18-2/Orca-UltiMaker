@@ -22604,3 +22604,11 @@ msgid ""
 "%s is a general preset made from the maker's values for a Bambu Lab printer, and nobody has calibrated it on this printer yet. Calibrate it (Calibration menu: Temperature, Flow ratio, Pressure advance) and save it under a new name: the copy is made for this printer only, and this hint no longer shows for it."
 msgstr ""
 "%s ist ein allgemeines Profil aus den Herstellerwerten für einen Bambu-Lab-Drucker, und an diesem Drucker hat es noch niemand kalibriert. Kalibrieren Sie es (Menü Kalibrierung: Temperatur, Flussverhältnis, Pression Advance) und speichern Sie es unter einem neuen Namen: Die Kopie gilt dann nur für diesen Drucker, und dieser Hinweis erscheint für sie nicht mehr."
+
+#: src/slic3r/GUI/BackgroundSlicingProcess.cpp
+msgid "The UltiGCode file could not be completed: its first lines, which the UltiMaker 2 reads before it prints, are missing. Nothing was saved."
+msgstr "Die UltiGCode-Datei konnte nicht fertiggestellt werden: Ihre ersten Zeilen, die der UltiMaker 2 vor dem Druck liest, fehlen. Es wurde nichts gespeichert."
+
+#: src/slic3r/GUI/Plater.cpp
+msgid "The UltiMaker 2 family prints from its SD card. Export the G-code and copy the file to the card."
+msgstr "Die UltiMaker-2-Familie druckt von ihrer SD-Karte. Exportieren Sie den G-Code und kopieren Sie die Datei auf die Karte."

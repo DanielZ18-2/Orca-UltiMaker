@@ -15,6 +15,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/log/trivial.hpp>
+#include <boost/nowide/fstream.hpp>
 
 namespace Slic3r {
 namespace UltimakerUFPExport {
@@ -81,7 +82,8 @@ static GriffinSourceData parse_griffin_source_data(const std::string& gcode_path
     const ScopedCNumericLocale locale_guard; // see GCodeArchiveUtils.hpp
     GriffinSourceData d;
 
-    std::ifstream gf(gcode_path);
+    // boost::nowide: the path is UTF-8, also on Windows (umlauts in a user name).
+    boost::nowide::ifstream gf(gcode_path);
     if (!gf.is_open()) return d;
 
     std::string line;
@@ -346,7 +348,7 @@ std::string pack_to_archive(const std::string& gcode_path, const PrintConfig& co
 
     std::string gcode;
     {
-        std::ifstream f(gcode_source, std::ios::binary);
+        boost::nowide::ifstream f(gcode_source, std::ios::binary);
         if (!f.is_open()) {
             BOOST_LOG_TRIVIAL(error) << "UltimakerUFPExport: input G-code not found: " << gcode_source;
             if (used_temp_source) {
@@ -407,6 +409,94 @@ std::string pack_to_archive(const std::string& gcode_path, const PrintConfig& co
     BOOST_LOG_TRIVIAL(info) << "UltimakerUFPExport: UFP archive created: " << archive_path
         << " [" << data.duration_s << "s, " << data.total_filament_mm << "mm filament, Griffin header included]";
     return archive_path;
+}
+
+// -- UltiGCode head (UltiMaker 2 family) --------------------------------------
+//
+// Measured on Cura 5.13.0's file for the UltiMaker 2+ (2025_20mm_Cube):
+//   ;FLAVOR:UltiGCode  ;TIME:2882  ;MATERIAL:3306  ;MATERIAL2:0
+//   ;NOZZLE_DIAMETER:0.4  ;MINX..;MAXZ  ;TARGET_MACHINE.NAME  ;Generated with
+// TIME in seconds, MATERIAL in mm3 per extruder: the file's last E, 3306.66,
+// is the same amount. Written here are the lines the firmware reads: the
+// dialect from the first line, the print screen and the extruders to heat
+// from the first lines. The MIN/MAX lines are left out: this module knows the
+// build volume, not the model's bounds (build_griffin_header writes the build
+// volume), and a wrong box is worse than none.
+
+bool add_ultigcode_header(const std::string& gcode_path, const PrintConfig& config)
+{
+    if (config.gcode_flavor != gcfUltiGCode)
+        return false;
+
+    std::string gcode;
+    {
+        boost::nowide::ifstream f(gcode_path, std::ios::binary);
+        if (!f.is_open()) {
+            BOOST_LOG_TRIVIAL(error) << "UltimakerUFPExport: G-code for the UltiGCode head not found: " << gcode_path;
+            return false;
+        }
+        gcode.assign(std::istreambuf_iterator<char>(f), {});
+    }
+    static const std::string flavor_line = ";FLAVOR:UltiGCode\n";
+    if (boost::algorithm::starts_with(gcode, flavor_line))
+        return true; // written before -- never a second head
+
+    const GriffinSourceData d = parse_griffin_source_data(gcode_path);
+
+    double nozzle = 0.4;
+    if (const auto* opt = config.option("nozzle_diameter"))
+        if (const auto* v = dynamic_cast<const ConfigOptionFloats*>(opt))
+            if (!v->values.empty()) nozzle = v->values.front();
+    std::string machine;
+    if (const auto* opt = config.option("printer_model"))
+        if (const auto* s = dynamic_cast<const ConfigOptionString*>(opt))
+            machine = s->value;
+    auto material = [&d](size_t i) -> long {
+        return i < d.volume_used_mm3.size() ? std::lround(d.volume_used_mm3[i]) : 0L;
+    };
+    // The firmware heats, primes and converts mm3 to mm only for an extruder
+    // whose ;MATERIAL is at least 1. Without the amount (no "filament used
+    // [cm3]", say a post-processing script removed the comments) the head
+    // would start a cold print fed in mm3 as mm -- no head then, and no file.
+    if (material(0) < 1) {
+        BOOST_LOG_TRIVIAL(error) << "UltimakerUFPExport: no amount of material for extruder 1 in " << gcode_path
+                                 << " (\"filament used [cm3]\"), no UltiGCode head";
+        return false;
+    }
+
+    std::ostringstream hdr;
+    hdr.imbue(std::locale::classic()); // numbers ALWAYS in dot format - see GCodeArchiveUtils.hpp
+    hdr << flavor_line;
+    hdr << ";TIME:" << d.duration_s << "\n";
+    hdr << ";MATERIAL:" << material(0) << "\n";
+    hdr << ";MATERIAL2:" << material(1) << "\n";
+    hdr << ";NOZZLE_DIAMETER:" << nozzle << "\n";
+    if (!machine.empty())
+        hdr << ";TARGET_MACHINE.NAME:" << machine << "\n";
+
+    // Next to the file first, then over it: a failed write leaves the old file.
+    const std::string temp_path = gcode_path + ".ultigcode_head";
+    {
+        boost::nowide::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
+        out << hdr.str() << gcode;
+        out.close();
+        if (!out) {
+            BOOST_LOG_TRIVIAL(error) << "UltimakerUFPExport: could not write " << temp_path;
+            boost::system::error_code ec;
+            boost::filesystem::remove(temp_path, ec);
+            return false;
+        }
+    }
+    boost::system::error_code ec;
+    boost::filesystem::rename(temp_path, gcode_path, ec);
+    if (ec) {
+        BOOST_LOG_TRIVIAL(error) << "UltimakerUFPExport: could not replace " << gcode_path << ": " << ec.message();
+        boost::filesystem::remove(temp_path, ec);
+        return false;
+    }
+    BOOST_LOG_TRIVIAL(info) << "UltimakerUFPExport: UltiGCode head written to " << gcode_path << " ["
+                            << d.duration_s << "s, " << material(0) << " mm3]";
+    return true;
 }
 
 } // namespace UltimakerUFPExport

@@ -838,9 +838,8 @@ void BackgroundSlicingProcess::finalize_gcode()
 			// DEBUG (2026-06-18): unconditional, always logs - tells us exactly what
 			// flavor this dispatch saw at runtime, regardless of which branch (if any)
 			// matches below. Reference: gcfMakerBotLegacy=13, gcfMakerBotBirdwing=14,
-			// gcfMakerBotLava=15, gcfGriffin=16, gcfCheetah=17 (see
-			// PrintConfig.hpp enum order). The real UltiGCode will be
-			// appended after 17, so none of the numbers above shift.
+			// gcfMakerBotLava=15, gcfGriffin=16, gcfCheetah=17,
+			// gcfUltiGCode=18 (see PrintConfig.hpp enum order).
 			BOOST_LOG_TRIVIAL(info) << "MakerBot/UltiMaker Fork: finalize_gcode() dispatch sees gcode_flavor="
 				<< (int)_bsp_f2 << " for export_path=" << m_export_path;
 			if (_bsp_f2 == gcfMakerBotBirdwing || _bsp_f2 == gcfMakerBotLava) {
@@ -855,6 +854,15 @@ void BackgroundSlicingProcess::finalize_gcode()
 					BOOST_LOG_TRIVIAL(info) << "UltimakerUFPExport: archive at " << _arch2;
 				else
 					BOOST_LOG_TRIVIAL(warning) << "UltimakerUFPExport: failed for " << export_path;
+			} else if (_bsp_f2 == gcfUltiGCode) {
+				// Without its head the machine takes the file for classic
+				// G-code and feeds the mm3 as mm of filament. No file is
+				// better than that one.
+				if (!UltimakerUFPExport::add_ultigcode_header(export_path, m_fff_print->config())) {
+					boost::system::error_code _ec;
+					boost::filesystem::remove(export_path, _ec);
+					throw Slic3r::ExportError(_u8L("The UltiGCode file could not be completed: its first lines, which the UltiMaker 2 reads before it prints, are missing. Nothing was saved."));
+				}
 			} else if (_bsp_f2 == gcfMakerBotLegacy) {
 				const std::string _arch2 = GPXExport::pack_to_archive(export_path, m_fff_print->config());
 				if (!_arch2.empty())
@@ -930,6 +938,15 @@ void BackgroundSlicingProcess::export_gcode()
 					BOOST_LOG_TRIVIAL(info) << "UltimakerUFPExport: archive created at " << _arch;
 				else
 					BOOST_LOG_TRIVIAL(warning) << "UltimakerUFPExport: failed for " << export_path;
+			} else if (_bsp_f == gcfUltiGCode) {
+				// Without its head the machine takes the file for classic
+				// G-code and feeds the mm3 as mm of filament. No file is
+				// better than that one.
+				if (!UltimakerUFPExport::add_ultigcode_header(export_path, m_fff_print->config())) {
+					boost::system::error_code _ec;
+					boost::filesystem::remove(export_path, _ec);
+					throw Slic3r::ExportError(_u8L("The UltiGCode file could not be completed: its first lines, which the UltiMaker 2 reads before it prints, are missing. Nothing was saved."));
+				}
 			} else if (_bsp_f == gcfMakerBotLegacy) {
 				const std::string _arch = GPXExport::pack_to_archive(export_path, m_fff_print->config());
 				if (!_arch.empty())

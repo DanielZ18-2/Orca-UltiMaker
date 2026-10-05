@@ -48,9 +48,11 @@ PressureEqualizer::PressureEqualizer(const Slic3r::GCodeConfig &config) : m_use_
     m_max_segment_length = 2.f;
 
     // Calculate filamet crossections for the multiple extruders.
+    // MakerBot / UltiMaker Fork: UltiGCode's E is mm3 already, so the
+    // volumetric rate below is E per length times 1.
     m_filament_crossections.clear();
     for (double r : config.filament_diameter.values) {
-        double a = 0.25f * M_PI * r * r;
+        double a = config.gcode_flavor.value == gcfUltiGCode ? 1. : 0.25f * M_PI * r * r;
         m_filament_crossections.push_back(float(a));
     }
 

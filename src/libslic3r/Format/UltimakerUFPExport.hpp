@@ -28,6 +28,7 @@
 // (plugins/UFPWriter/UFPWriter.py), as published on GitHub (checked against
 // the "Cura 5.12" / current master branch, June 2026).
 //
+// Output: gcfUltiGCode -> .gcode with the UltiGCode head (add_ultigcode_header)
 // Output: gcfGriffin, gcfCheetah -> .ufp (OPC ZIP: 3D/model.gcode incl.
 //                               Griffin header,
 //                                Metadata/thumbnail.png, Cura/slicemetadata.json)
@@ -55,6 +56,19 @@ std::string get_archive_extension(GCodeFlavor flavor);
 // gcfCheetah) or failed.
 std::string pack_to_archive(const std::string& gcode_path,
                              const PrintConfig& config);
+
+// gcfUltiGCode (UltiMaker 2, 2 Go, 2 Extended, 2+, 2 Extended+): the file
+// stays a plain .gcode, but the machine reads its first lines -- the part of
+// Cura's head the firmware uses.
+// ";FLAVOR:UltiGCode" on the first line makes it heat and prime from the
+// material settings on the printer and take E as mm3; without it the file
+// runs as classic G-code and the mm3 go out as mm of filament. ;TIME,
+// ;MATERIAL and ;NOZZLE_DIAMETER fill the print screen, and the firmware heats
+// and converts only an extruder whose ;MATERIAL is at least 1. Writes these
+// lines in front of the exported file, in place, once. False if the flavor is
+// another, the amount of material is unknown or the file could not be
+// rewritten; the file is then as it was.
+bool add_ultigcode_header(const std::string& gcode_path, const PrintConfig& config);
 
 } // namespace UltimakerUFPExport
 } // namespace Slic3r

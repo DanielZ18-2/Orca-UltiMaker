@@ -49,14 +49,16 @@ enum GCodeFlavor : unsigned char {
     gcfMakerBotBirdwing,  // Replicator+/Z18/5thGen → .makerbot (JSON-toolpath)
     gcfMakerBotLava,      // Method/Method X/XL + Sketch → .makerbot (print.gcode)
     gcfGriffin,           // UltiMaker 2+ Connect/3/S3/S5/S7/Factor 4 → .ufp
-    gcfCheetah            // UltiMaker S8/Factor 4+ → .ufp, Griffin + M214/M215
+    gcfCheetah,           // UltiMaker S8/Factor 4+ → .ufp, Griffin + M214/M215
+    gcfUltiGCode          // UltiMaker 2/2 Go/2 Extended/2+/2 Extended+ -> .gcode, E in mm3
 };
 
 // MakerBot / UltiMaker Fork: does this flavor have a pressure advance
 // command at all? Klipper has SET_PRESSURE_ADVANCE, RepRapFirmware M572,
 // Repetier M233, Marlin M900 (Linear Advance), and Cheetah M214. Sailfish,
-// Birdwing, Lava and Griffin firmware read none of them, and an unknown
-// command in the file is at best ignored.
+// Birdwing, Lava and Griffin firmware read none of them, nor does the
+// UltiMaker 2 firmware (UltiGCode), and an unknown command in the file is at
+// best ignored.
 //
 // Three places ask: the writer stays silent, the filament tab hides the
 // settings, and the calibration menu does not offer the tower. Regel 116 --
@@ -64,7 +66,8 @@ enum GCodeFlavor : unsigned char {
 inline bool flavor_has_pressure_advance(GCodeFlavor flavor)
 {
     return flavor != gcfMakerBotLegacy && flavor != gcfMakerBotBirdwing &&
-           flavor != gcfMakerBotLava   && flavor != gcfGriffin;
+           flavor != gcfMakerBotLava   && flavor != gcfGriffin &&
+           flavor != gcfUltiGCode;
 }
 
 // MakerBot / UltiMaker Fork: does this flavor describe a machine whose number
@@ -88,7 +91,7 @@ inline bool flavor_has_fixed_filament_slots(GCodeFlavor flavor)
 {
     return flavor == gcfMakerBotLegacy || flavor == gcfMakerBotBirdwing ||
            flavor == gcfMakerBotLava   || flavor == gcfGriffin ||
-           flavor == gcfCheetah;
+           flavor == gcfCheetah        || flavor == gcfUltiGCode;
 }
 
 

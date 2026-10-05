@@ -4973,7 +4973,7 @@ bool Sidebar::should_show_SEMM_buttons()
         const auto _fl = _f->value;
         if (_fl == gcfMakerBotLegacy   || _fl == gcfMakerBotBirdwing ||
             _fl == gcfMakerBotLava      || _fl == gcfGriffin ||
-            _fl == gcfCheetah)
+            _fl == gcfCheetah           || _fl == gcfUltiGCode)
             return false;
     }
     // The UltiMaker Original and Original+ run Marlin; their model says what
@@ -18335,6 +18335,15 @@ void Plater::send_gcode_legacy(int plate_idx, Export3mfProgressFn proFn)
     // so the standalone G-code is generated and then packed into the native archive.
     const auto* _gcf0 = physical_printer_config->option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor");
     const GCodeFlavor _flavor0 = _gcf0 ? _gcf0->value : gcfMarlinLegacy;
+    // MakerBot / UltiMaker Fork: the UltiMaker 2 family has no network and
+    // prints UltiGCode from its SD card. The head that makes a file UltiGCode
+    // is written at export (BackgroundSlicingProcess); a file sent to a print
+    // host would go without it, and the machine would feed the mm3 as mm of
+    // filament.
+    if (_flavor0 == gcfUltiGCode) {
+        show_error(this, _L("The UltiMaker 2 family prints from its SD card. Export the G-code and copy the file to the card."), false);
+        return;
+    }
     const bool _is_native_archive = (_flavor0 == gcfMakerBotBirdwing || _flavor0 == gcfMakerBotLava || _flavor0 == gcfGriffin ||
                                      _flavor0 == gcfCheetah);
     const bool  use_3mf     = (use_3mf_opt != nullptr && use_3mf_opt->value) || _is_native_archive;

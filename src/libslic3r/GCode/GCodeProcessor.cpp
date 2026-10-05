@@ -3871,8 +3871,10 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
 
             const double lengthsScaleFactor = (m_units == EUnits::Inches) ? double(INCHES_TO_MM) : 1.0;
             double       ret                = *value * lengthsScaleFactor;
-            // if (axis == E && m_use_volumetric_e)
-            //     ret /= area_filament_cross_section;
+            // MakerBot / UltiMaker Fork: UltiGCode writes E in mm3 of
+            // material; everything here counts mm of filament.
+            if (axis == E && m_flavor == gcfUltiGCode)
+                ret /= area_filament_cross_section;
             return is_relative ? m_start_position[axis] + ret : m_origin[axis] + ret;
         }
         else
@@ -4699,8 +4701,10 @@ void GCodeProcessor::process_G2_G3(const GCodeReader::GCodeLine& line, bool cloc
         else if (m_e_local_positioning_type == EPositioningType::Relative)
             ret[E] -= prev_position[E];
 
-        // if (m_use_volumetric_e)
-        //     ret[E] *= area_filament_cross_section;
+        // MakerBot / UltiMaker Fork: back to the file's unit, mm3 for
+        // UltiGCode -- process_G1() reads these lines like the file's own.
+        if (m_flavor == gcfUltiGCode)
+            ret[E] *= area_filament_cross_section;
 
         const double lengthsScaleFactor = (m_units == EUnits::Inches) ? double(INCHES_TO_MM) : 1.0;
         for (unsigned char a = X; a <= E; ++a) {
@@ -4886,22 +4890,44 @@ void GCodeProcessor::process_G29(const GCodeReader::GCodeLine& line)
 
 void GCodeProcessor::process_G10(const GCodeReader::GCodeLine& line)
 {
-    // Emulate G1 retract, decrement G1 count as it's will be incremented in process_G1, but it's fake G1
-    GCodeReader::GCodeLine g10;
-    g10.set(Axis::E, -this->m_parser.config().retraction_length.get_at(m_extruder_id));
-    g10.set(Axis::F,  this->m_parser.config().retraction_speed.get_at(m_extruder_id) * 60);
-    --m_g1_line_id;
-    process_G1(g10);
+    // Emulate G1 retract
+    process_firmware_retraction(-this->m_parser.config().retraction_length.get_at(m_extruder_id),
+                                this->m_parser.config().retraction_speed.get_at(m_extruder_id));
 }
 
 void GCodeProcessor::process_G11(const GCodeReader::GCodeLine& line)
 {
-    // Emulate G1 unretract, decrement G1 count as it's will be incremented in process_G1, but it's fake G1
-    GCodeReader::GCodeLine g11;
-    g11.set(Axis::E, this->m_parser.config().retraction_length.get_at(m_extruder_id) + this->m_parser.config().retract_restart_extra.get_at(m_extruder_id));
-    g11.set(Axis::F, this->m_parser.config().deretraction_speed.get_at(m_extruder_id) * 60);
+    // Emulate G1 unretract
+    process_firmware_retraction(this->m_parser.config().retraction_length.get_at(m_extruder_id) +
+                                    this->m_parser.config().retract_restart_extra.get_at(m_extruder_id),
+                                this->m_parser.config().deretraction_speed.get_at(m_extruder_id));
+}
+
+// MakerBot / UltiMaker Fork: G10 and G11 move the filament from where it is,
+// whatever the E mode. Emulated as an absolute G1, a G10 went to minus the
+// retraction length counted from the last G92 -- with absolute E (UltiGCode as
+// Cura writes it, or any machine set so) a retraction of all the filament
+// extruded since the last reset, at retraction speed, in the time estimate.
+// So the emulated move is relative, and in the file's unit: process_G1()
+// turns UltiGCode's mm3 back into mm. Decrements the G1 count, which
+// process_G1() increments for this fake G1.
+void GCodeProcessor::process_firmware_retraction(double length, double speed)
+{
+    float file_unit = 1.0f;
+    if (m_flavor == gcfUltiGCode) {
+        const int   filament_id = get_filament_id();
+        const float diameter    = (static_cast<size_t>(filament_id) < m_result.filament_diameters.size()) ?
+                                      m_result.filament_diameters[filament_id] : m_result.filament_diameters.back();
+        file_unit = static_cast<float>(M_PI) * sqr(0.5f * diameter);
+    }
+    GCodeReader::GCodeLine move;
+    move.set(Axis::E, length * file_unit);
+    move.set(Axis::F, speed * 60);
     --m_g1_line_id;
-    process_G1(g11);
+    const EPositioningType e_positioning = m_e_local_positioning_type;
+    m_e_local_positioning_type           = EPositioningType::Relative;
+    process_G1(move);
+    m_e_local_positioning_type = e_positioning;
 }
 
 void GCodeProcessor::process_G20(const GCodeReader::GCodeLine& line)
@@ -6064,8 +6090,9 @@ double GCodeProcessor::extract_absolute_position_on_axis(Axis axis, const GCodeR
 
         const double lengthsScaleFactor = (m_units == EUnits::Inches) ? double(INCHES_TO_MM) : 1.0;
         double ret = line.value(Slic3r::Axis(axis)) * lengthsScaleFactor;
-        // if (axis == E && m_use_volumetric_e)
-        //     ret /= area_filament_cross_section;
+        // MakerBot / UltiMaker Fork: as in process_G1().
+        if (axis == E && m_flavor == gcfUltiGCode)
+            ret /= area_filament_cross_section;
         return is_relative ? m_start_position[axis] + ret : m_origin[axis] + ret;
     }
     else

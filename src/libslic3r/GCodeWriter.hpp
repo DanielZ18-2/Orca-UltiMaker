@@ -196,6 +196,9 @@ public:
     std::string _travel_to_z(double z, const std::string &comment);
     std::string _spiral_travel_to_z(double z, const Vec2d &ij_offset, const std::string &comment);
     std::string _retract(double length, double restart_extra, const std::string &comment);
+    // MakerBot / UltiMaker Fork: UltiGCode, see GCodeWriter.cpp.
+    double      output_e() const;
+    bool        firmware_retraction() const;
     std::string set_acceleration_internal(Acceleration type, unsigned int acceleration);
 
 };
