@@ -21219,3 +21219,8 @@ msgstr ""
 #: src/slic3r/GUI/Plater.cpp
 msgid "The UltiMaker 2 family prints from its SD card. Export the G-code and copy the file to the card."
 msgstr ""
+
+#: src/slic3r/GUI/Plater.cpp
+#, possible-boost-format
+msgid "Filament %1% (%2%) is set to %3% mm, but this printer takes %4% mm filament: the print would get %5% times the planned material. Choose a filament preset for this printer."
+msgstr ""

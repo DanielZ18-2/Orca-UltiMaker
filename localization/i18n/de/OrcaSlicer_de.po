@@ -22612,3 +22612,8 @@ msgstr "Die UltiGCode-Datei konnte nicht fertiggestellt werden: Ihre ersten Zeil
 #: src/slic3r/GUI/Plater.cpp
 msgid "The UltiMaker 2 family prints from its SD card. Export the G-code and copy the file to the card."
 msgstr "Die UltiMaker-2-Familie druckt von ihrer SD-Karte. Exportieren Sie den G-Code und kopieren Sie die Datei auf die Karte."
+
+#: src/slic3r/GUI/Plater.cpp
+#, possible-boost-format
+msgid "Filament %1% (%2%) is set to %3% mm, but this printer takes %4% mm filament: the print would get %5% times the planned material. Choose a filament preset for this printer."
+msgstr "Filament %1% (%2%) ist auf %3% mm eingestellt, dieser Drucker nimmt aber %4% mm Filament: Der Druck bekäme das %5%-Fache des geplanten Materials. Wählen Sie ein Filamentprofil für diesen Drucker."

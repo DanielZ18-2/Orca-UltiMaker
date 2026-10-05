@@ -9551,8 +9551,59 @@ void Plater::priv::update_print_volume_state()
     this->model.update_print_volume_state(build_volume);
 }
 
-void Plater::priv::process_validation_warning(StringObjectException const &warning) const
+// MakerBot / UltiMaker Fork (O72): a filament in use whose diameter does not
+// fit the printer. Orca's library presets are 1.75 mm and selectable on every
+// printer; one of them on a 2.85 mm UltiMaker makes Orca feed 2.65 times the
+// material, and nothing said so. PresetBundle::load_selections() catches a
+// remembered one at start only; this catches one chosen while Orca runs, every
+// time the print is validated. The printer's diameter is that of its default
+// filament preset, the signal load_selections() and the general import
+// condition use. Tolerance 0.1 mm as there: 2.85 against 2.9 passes, 1.75 or
+// 3.0 against 2.85 does not.
+//
+// Only for this fork's machines: other vendors' default filament presets do
+// not always have the diameter their machine takes. And not for UltiGCode:
+// its E is mm3 of material, which the machine turns into filament with the
+// diameter set on it, so a wrong diameter in the preset changes nothing there.
+static StringObjectException filament_diameter_warning(const Print *print)
 {
+    if (print == nullptr || print->config().gcode_flavor.value == gcfUltiGCode)
+        return {};
+    PresetBundle             &bundle  = *wxGetApp().preset_bundle;
+    const DynamicPrintConfig &printer = bundle.printers.get_edited_preset().config;
+    if (!printer_model_is_makerbot_or_ultimaker(bundle, printer))
+        return {};
+    double expected = 0.;
+    if (const auto *defaults = printer.option<ConfigOptionStrings>("default_filament_profile");
+        defaults != nullptr && !defaults->values.empty())
+        if (const Preset *filament = bundle.filaments.find_preset(defaults->values.front(), false, true))
+            if (const auto *diameters = filament->config.option<ConfigOptionFloats>("filament_diameter");
+                diameters != nullptr && !diameters->values.empty())
+                expected = diameters->values.front();
+    if (expected <= 0.)
+        return {};
+    const std::vector<double> &diameters = print->config().filament_diameter.values;
+    for (unsigned int id : print->extruders()) {
+        if (id >= diameters.size() || diameters[id] <= 0. || std::abs(diameters[id] - expected) <= 0.1)
+            continue;
+        const double      ratio = (expected / diameters[id]) * (expected / diameters[id]);
+        const std::string name  = id < bundle.filament_presets.size() ? bundle.filament_presets[id] : std::string();
+        BOOST_LOG_TRIVIAL(warning) << "filament_diameter_warning: filament " << id + 1 << " \"" << name << "\" " << diameters[id]
+                                   << " mm, the printer takes " << expected << " mm";
+        StringObjectException w;
+        w.string = GUI::format(_u8L("Filament %1% (%2%) is set to %3% mm, but this printer takes %4% mm filament: the print would get %5% times the planned material. Choose a filament preset for this printer."), id + 1, name, diameters[id], expected, std::round(ratio * 100.) / 100.);
+        return w;
+    }
+    return {};
+}
+
+void Plater::priv::process_validation_warning(StringObjectException const &validation_warning) const
+{
+    // MakerBot / UltiMaker Fork (O72): the diameter outranks any other warning.
+    const StringObjectException  diameter_warning = printer_technology == ptFFF ?
+                                                        filament_diameter_warning(background_process.fff_print()) :
+                                                        StringObjectException();
+    const StringObjectException &warning = diameter_warning.string.empty() ? validation_warning : diameter_warning;
     if (warning.string.empty())
         notification_manager->close_notification_of_type(NotificationType::ValidateWarning);
     else {
