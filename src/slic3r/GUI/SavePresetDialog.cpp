@@ -37,6 +37,18 @@ SavePresetDialog::Item::Item(Preset::Type type, const std::string &suffix, wxBox
 
     const Preset &sel_preset  = m_presets->get_selected_preset();
     std::string   preset_name = sel_preset.is_default ? "Untitled" : sel_preset.is_system ? (boost::format(("%1% - %2%")) % sel_preset.name % suffix).str() : sel_preset.is_from_bundle() && !sel_preset.alias.empty() ? sel_preset.alias : sel_preset.name;
+    // MakerBot / UltiMaker Fork: a general filament preset "Import Configs"
+    // made from presets for Bambu Lab printers is calibrated on a printer and
+    // saved as a copy for it (D4); Tab::save_preset() ties such a copy to the
+    // printer. Saved under its own name it would stay general and carry one
+    // printer's values to every printer. So the name proposed is the copy's,
+    // as Orca names a filament preset made for one printer
+    // (PresetCollection::clone_presets_for_filament()): "<name> @<printer>".
+    if (m_type == Preset::TYPE_FILAMENT && PresetBundle::is_general_import(sel_preset)) {
+        const PresetCollection &printers = wxGetApp().preset_bundle->printers;
+        const Preset           *printer  = printers.get_preset_base(printers.get_selected_preset());
+        preset_name += " @" + (printer != nullptr ? printer->name : printers.get_selected_preset_name());
+    }
 
     // if name contains extension
     if (boost::iends_with(preset_name, ".ini")) {
