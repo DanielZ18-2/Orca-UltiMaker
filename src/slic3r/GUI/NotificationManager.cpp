@@ -2211,6 +2211,18 @@ void NotificationManager::close_notification_of_type(const NotificationType type
 	}
 }
 
+// MakerBot / UltiMaker Fork: for a custom notification that has to go once
+// what it says no longer holds -- the hint for a general preset, when its
+// preset is no longer selected (Plater.cpp).
+void NotificationManager::close_custom_notification(const std::string& text)
+{
+	for (std::unique_ptr<PopNotification> &notification : m_pop_notifications) {
+		if (notification->get_type() == NotificationType::CustomNotification && notification->compare_text(text)) {
+			notification->close();
+		}
+	}
+}
+
 void NotificationManager::close_and_delete_self(PopNotification * self)
 {
     for (auto it = m_pop_notifications.begin(); it != m_pop_notifications.end();) {

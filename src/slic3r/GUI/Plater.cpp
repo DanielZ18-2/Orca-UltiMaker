@@ -385,6 +385,56 @@ static MbMaterialHint mb_material_hint(const DynamicPrintConfig& printer_cfg,
     return MbMaterialHint::None;   // UltiMaker, Sketch, other legacy
 }
 
+// MakerBot / UltiMaker Fork: the hint for a general preset stays until it is
+// closed (D4) -- it is not to stay once its preset is no longer selected.
+// Each slot's standing hint is remembered with its preset and closed as soon
+// as the slot shows another one: a new choice in the slot
+// (mb_show_material_hint()), or any other change of the selection, such as a
+// printer taking another filament (mb_close_stale_material_hints()).
+struct MbStandingHint
+{
+    std::string preset;
+    std::string text;
+};
+
+static std::map<size_t, MbStandingHint>& mb_standing_hints()
+{
+    static std::map<size_t, MbStandingHint> hints;
+    return hints;
+}
+
+// Forgets the standing hint of a slot, and closes it -- unless another slot
+// shows the same preset, which has the same hint.
+static void mb_forget_standing_hint(size_t slot)
+{
+    auto&      hints = mb_standing_hints();
+    const auto it    = hints.find(slot);
+    if (it == hints.end())
+        return;
+    const std::string text = it->second.text;
+    hints.erase(it);
+    for (const auto& other : hints)
+        if (other.second.text == text)
+            return;
+    if (Plater* plater = wxGetApp().plater())
+        if (auto* nm = plater->get_notification_manager())
+            nm->close_custom_notification(text);
+}
+
+// Closes the standing hints whose slot shows another preset now, or is gone.
+static void mb_close_stale_material_hints()
+{
+    if (mb_standing_hints().empty())
+        return;
+    const auto&         fnames = wxGetApp().preset_bundle->filament_presets;
+    std::vector<size_t> stale;
+    for (const auto& standing : mb_standing_hints())
+        if (standing.first >= fnames.size() || fnames[standing.first] != standing.second.preset)
+            stale.push_back(standing.first);
+    for (const size_t slot : stale)
+        mb_forget_standing_hint(slot);
+}
+
 // Shows the material hint for one extruder slot, if there is one to show.
 // Called both when the filament changes and when the Smart Extruder changes:
 // the pairing can go wrong from either side, and swapping the extruder while
@@ -474,13 +524,21 @@ static void mb_show_material_hint(size_t slot)
 
     // MakerBot / UltiMaker Fork: the calibration hint stays until it is
     // closed, like the one-head notice (202B); the others fade after ten
-    // seconds.
+    // seconds. A standing hint of this slot for another preset goes first.
+    const std::string text(hint.ToUTF8().data());
+    {
+        const auto standing = mb_standing_hints().find(slot);
+        if (standing != mb_standing_hints().end() && (!general_import || standing->second.text != text))
+            mb_forget_standing_hint(slot);
+    }
     if (!hint.empty())
         if (auto* nm = wxGetApp().plater()->get_notification_manager())
             nm->push_notification(NotificationType::CustomNotification,
                                   general_import ? NotificationManager::NotificationLevel::WarningNotificationLevel :
                                                    NotificationManager::NotificationLevel::RegularNotificationLevel,
-                                  std::string(hint.ToUTF8().data()));
+                                  text);
+    if (general_import && slot < fnames.size())
+        mb_standing_hints()[slot] = {fnames[slot], text};
 }
 
 static bool smart_extruder_is_lava_or_method(const DynamicPrintConfig& cfg)
@@ -3866,6 +3924,10 @@ void Sidebar::update_presets(Preset::Type preset_type)
     default: break;
     }
 
+    // MakerBot / UltiMaker Fork: a standing hint for a general preset goes
+    // once its slot shows another preset -- after a printer change, say.
+    mb_close_stale_material_hints();
+
     // Synchronize config.ini with the current selections.
     wxGetApp().preset_bundle->export_selections(*wxGetApp().app_config);
 
@@ -3896,6 +3958,10 @@ void Sidebar::update_presets_from_to(Slic3r::Preset::Type preset_type, std::stri
 
     default: break;
     }
+
+    // MakerBot / UltiMaker Fork: likewise after a preset saved under a new
+    // name took the place of the old one
+    mb_close_stale_material_hints();
 
     // Synchronize config.ini with the current selections.
     wxGetApp().preset_bundle->export_selections(*wxGetApp().app_config);
