@@ -111,7 +111,11 @@ std::string SpiralVase::process_layer(const std::string &gcode, bool last_layer)
     std::vector<SpiralVase::SpiralPoint>* current_layer = new std::vector<SpiralVase::SpiralPoint>();
     std::vector<SpiralVase::SpiralPoint>* previous_layer = m_previous_layer;
 
-    bool smooth_spiral = m_smooth_spiral;
+    // MakerBot / UltiMaker Fork: smoothing scales each line's E by the change
+    // of the line's length (below) -- a delta with relative E, but a position
+    // with absolute E, where E jumped by everything extruded so far. Off with
+    // absolute E, as the transitions below already are.
+    bool smooth_spiral = m_smooth_spiral && m_config.use_relative_e_distances.value;
     std::string new_gcode;
     std::string transition_gcode;
     float max_xy_dist_for_smoothing = m_max_xy_smoothing;
