@@ -2109,13 +2109,17 @@ static GeneralImport make_general_import(const GeneralAnalysis                  
             } else if (it->is_string() && it->get<std::string>() != "nil")
                 preset[key] = *it;
         }
-        std::string notes = "General preset made by Import Configs for every printer taking 1.75 mm filament, from \"" +
-                            a.info[values_from].name + "\"";
+        // Where the values came from, and nothing that will change: a copy
+        // saved for one printer keeps the note and inherits the generic
+        // preset, not this one, so the note says neither that the preset is
+        // general nor that nobody has calibrated it. The hint for a general
+        // preset says that while it is one (Plater.cpp).
+        std::string notes = "Start values from \"" + a.info[values_from].name + "\"";
         if (values_from != i)
             notes += " and the changes of \"" + d.name + "\"";
-        notes += ". Taken over: temperatures, cooling, flow ratio, density and cost. From " + base +
+        notes += " (Import Configs): temperatures, cooling, flow ratio, density and cost. From " + base +
                  ": everything that depends on the printer -- maximum volumetric speed, retraction, pressure advance, "
-                 "filament G-code. Not calibrated on any printer yet.";
+                 "filament G-code.";
         const std::string maker_notes = json_string_of(values, "filament_notes");
         if (!maker_notes.empty())
             notes += "\n\n" + maker_notes;
