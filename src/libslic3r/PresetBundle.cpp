@@ -1418,7 +1418,8 @@ static std::vector<size_t> bases_first(const std::vector<PresetFileHead> &heads)
 //    nearest there is (bambu_model_rank());
 //  - a colour variant -- a preset inheriting another preset of the same
 //    import -- becomes a preset of its own: the general values of its base
-//    material and its own changes;
+//    material and its own changes, named with the material where its own
+//    name does not say it (variant_name());
 //  - compatible_printers stays empty, compatible_printers_condition is
 //    PresetBundle::GENERAL_IMPORT_CONDITION.
 // Process and printer presets made for Bambu Lab printers are left out.
@@ -1906,6 +1907,75 @@ static std::string generic_base_of(const std::string &type, const std::function<
     return family.empty() ? std::string() : generic(family);
 }
 
+// The words of a text, upper case: its runs of letters and digits.
+// "PETG-CF" -> PETG, CF; "KINGROON NPLA003BR" -> KINGROON, NPLA003BR.
+static std::vector<std::string> words_of(const std::string &text)
+{
+    std::vector<std::string> words;
+    std::string              word;
+    for (const char c : boost::to_upper_copy(text) + " ") {
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))
+            word += c;
+        else if (!word.empty()) {
+            words.push_back(word);
+            word.clear();
+        }
+    }
+    return words;
+}
+
+// Whether a name says the material of a filament type: it has each word of
+// the type. "KINGROON PETG Transparent" says PETG, "KINGROON NPETG008GR" does
+// not.
+static bool says_material(const std::string &name, const std::string &type)
+{
+    const std::vector<std::string> said = words_of(name);
+    for (const std::string &word : words_of(type))
+        if (std::find(said.begin(), said.end(), word) == said.end())
+            return false;
+    return true;
+}
+
+// The name of the general preset of document i, whose material and type
+// these are. A colour variant whose name does not say its material --
+// Kingroon names them by a code alone, "KINGROON NSC019RYB" -- takes the
+// material of the nearest preset of the import it inherits that says it,
+// then the words of its own name that one does not say: "KINGROON PLA Silk
+// NSC019RYB". The code stays: the bundles carry no colour name, and the code
+// is all that tells the variants of a material apart. Any other preset keeps
+// its material.
+static std::string variant_name(const GeneralAnalysis &a, size_t i, const std::string &material, const std::string &type)
+{
+    if (a.info[i].parent < 0 || says_material(material, type))
+        return material;
+    std::string base;
+    for (int up = a.info[i].parent, depth = 0; up >= 0 && depth < 8; up = a.info[size_t(up)].parent, ++depth) {
+        const std::string candidate = material_of(a.info[size_t(up)].name);
+        if (says_material(candidate, type)) {
+            base = candidate;
+            break;
+        }
+    }
+    if (base.empty())
+        return material;
+    const std::vector<std::string> has  = words_of(base);
+    std::string                    name = base;
+    std::string                    word;
+    // its words as they are spelt -- material_of() leaves one space between
+    // them --, but not those the base says already, the maker among them
+    for (const char c : material + " ") {
+        if (c != ' ') {
+            word += c;
+            continue;
+        }
+        const std::vector<std::string> parts = words_of(word);
+        if (std::any_of(parts.begin(), parts.end(), [&has](const std::string &part) { return std::find(has.begin(), has.end(), part) == has.end(); }))
+            name += " " + word;
+        word.clear();
+    }
+    return name;
+}
+
 // The material values a general preset takes over (Orca's names): what the
 // maker measured for the material, not what depends on the printer.
 static const char *const GENERAL_IMPORT_VALUES[] = {
@@ -1952,6 +2022,11 @@ static GeneralImport make_general_import(const GeneralAnalysis                  
                                          PresetImportReport                                *report)
 {
     GeneralImport general;
+    // the names in use, lower case: the materials of the import, then the
+    // names variant_name() gives
+    std::set<std::string> names;
+    for (const auto &entry : a.materials)
+        names.insert(boost::to_lower_copy(entry.first));
     for (size_t i = 0; i < a.documents.size(); ++i)
         if (a.info[i].bambu) {
             general.taken.emplace(boost::filesystem::path(a.documents[i].source).make_preferred().string(), a.documents[i].entry);
@@ -1995,13 +2070,16 @@ static GeneralImport make_general_import(const GeneralAnalysis                  
         if (filament_id.empty())
             filament_id = a.info[values_from].own_filament_id;
 
+        std::string name = variant_name(a, i, material, type);
+        if (name != material && !names.insert(boost::to_lower_copy(name)).second)
+            name = material; // taken, by a material of the import or another variant
         json preset                        = json::object();
-        preset[BBL_JSON_KEY_NAME]          = material;
+        preset[BBL_JSON_KEY_NAME]          = name;
         preset[BBL_JSON_KEY_INHERITS]      = base;
         preset[BBL_JSON_KEY_FROM]          = "User";
         const std::string version          = json_string_of(a.documents[i].doc, BBL_JSON_KEY_VERSION);
         preset[BBL_JSON_KEY_VERSION]       = version.empty() ? std::string("1.0.0.0") : version;
-        preset["filament_settings_id"]     = json::array({material});
+        preset["filament_settings_id"]     = json::array({name});
         if (!filament_id.empty())
             preset[BBL_JSON_KEY_FILAMENT_ID] = filament_id;
         preset["filament_vendor"]               = json::array({vendor});
