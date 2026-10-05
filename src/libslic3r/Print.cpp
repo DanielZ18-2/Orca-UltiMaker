@@ -1810,6 +1810,10 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
 
             const auto max_junction_deviation = m_config.machine_max_junction_deviation.values[0];
             const bool ignore_jerk_validation = m_config.gcode_flavor == gcfMarlinFirmware && max_junction_deviation > 0;
+            // MakerBot / UltiMaker Fork: no comparison with machine limits the
+            // writer never applies -- the warning would announce a cap that
+            // does not come. See flavor_keeps_own_motion_limits().
+            const bool check_machine_limits = !flavor_keeps_own_motion_limits(m_config.gcode_flavor.value);
 
             // check jerk
             if (!ignore_jerk_validation) {
@@ -1826,7 +1830,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
                    warning->opt_key = warning_key;
                 }
 
-                if (warning_key.empty() && m_default_object_config.default_jerk > 0) {
+                if (check_machine_limits && warning_key.empty() && m_default_object_config.default_jerk > 0) {
                    std::vector<std::string> jerk_to_check = {"default_jerk",     "outer_wall_jerk",    "inner_wall_jerk", "infill_jerk",
                                                              "top_surface_jerk", "initial_layer_jerk", "travel_jerk"};
                    const auto               max_jerk = std::min(m_config.machine_max_jerk_x.values[0], m_config.machine_max_jerk_y.values[0]);
@@ -1851,7 +1855,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
             
             // check acceleration
             const auto max_accel = m_config.machine_max_acceleration_extruding.values[0];
-            if (warning_key.empty() && m_default_object_config.default_acceleration > 0 && max_accel > 0) {
+            if (check_machine_limits && warning_key.empty() && m_default_object_config.default_acceleration > 0 && max_accel > 0) {
                const bool support_travel_acc = (m_config.gcode_flavor == gcfRepetier || m_config.gcode_flavor == gcfMarlinFirmware ||
                                                 m_config.gcode_flavor == gcfRepRapFirmware);
 

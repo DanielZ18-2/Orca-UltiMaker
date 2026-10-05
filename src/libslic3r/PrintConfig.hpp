@@ -94,6 +94,21 @@ inline bool flavor_has_fixed_filament_slots(GCodeFlavor flavor)
            flavor == gcfCheetah        || flavor == gcfUltiGCode;
 }
 
+// MakerBot / UltiMaker Fork: does the firmware of this flavor keep its own
+// motion limits, untouched by the machine limits in the printer settings
+// (machine_max_acceleration_*, machine_max_jerk_*)? The writer caps
+// acceleration and jerk at those for Marlin, Klipper and RepRapFirmware only
+// (GCodeWriter::apply_print_config()). For the MakerBot and UltiMaker flavors
+// it caps nothing: their machines get the process values where the format
+// carries them at all (not x3g, not the Birdwing toolpath) and apply their
+// own limits.
+inline bool flavor_keeps_own_motion_limits(GCodeFlavor flavor)
+{
+    return flavor == gcfMakerBotLegacy || flavor == gcfMakerBotBirdwing ||
+           flavor == gcfMakerBotLava   || flavor == gcfGriffin ||
+           flavor == gcfCheetah        || flavor == gcfUltiGCode;
+}
+
 
 enum class FuzzySkinType {
     None,
