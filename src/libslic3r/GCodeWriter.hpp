@@ -167,7 +167,9 @@ public:
     void set_is_first_layer(bool bval) { m_is_first_layer = bval; }
     GCodeFlavor get_gcode_flavor() const { return config.gcode_flavor; }
     void invalidate_acceleration() { m_last_acceleration = 0; m_last_travel_acceleration = 0; }
-    void invalidate_jerk() { m_last_jerk = 0; }
+    // MakerBot / UltiMaker Fork: M215 (Cheetah, true jerk) has its own cache;
+    // custom G-code that set the jerk leaves both unknown.
+    void invalidate_jerk() { m_last_jerk = 0; m_last_true_jerk = 0; }
 
     // Axis remap: permute/negate/reverse axes in G-code output.
     // Works standalone (without belt mode) for printers with non-standard axis conventions.

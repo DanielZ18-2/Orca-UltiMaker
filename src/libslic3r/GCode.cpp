@@ -862,7 +862,9 @@ static std::vector<Vec2d> get_path_of_change_filament(const Print& print)
             if (ascii_iequals(cmd, "M204") || ascii_iequals(cmd, "M201") ||
                 ascii_iequals(cmd, "M202"))
                 changes.acceleration = true;
-            else if ((ascii_iequals(cmd, "M205") || ascii_iequals(cmd, "M207") || ascii_iequals(cmd, "M566")) &&
+            // MakerBot / UltiMaker Fork: M215 is Cheetah's true jerk (X/Y in mm/s3)
+            else if ((ascii_iequals(cmd, "M205") || ascii_iequals(cmd, "M207") || ascii_iequals(cmd, "M566") ||
+                      ascii_iequals(cmd, "M215")) &&
                      custom_gcode_line_has_xy_parameter(line.raw()))
                 changes.jerk = true;
             else if (ascii_iequals(cmd, "SET_VELOCITY_LIMIT")) {
