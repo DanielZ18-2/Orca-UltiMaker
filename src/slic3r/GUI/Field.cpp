@@ -1967,7 +1967,13 @@ boost::any& Choice::get_value()
                     m_opt_id == "internal_solid_infill_pattern" || m_opt_id == "sparse_infill_pattern" ||
                     m_opt_id == "support_base_pattern" || m_opt_id == "support_interface_pattern" ||
                     m_opt_id == "ironing_pattern" || m_opt_id == "support_ironing_pattern" ||
-                    m_opt_id == "support_style" || m_opt_id == "curr_bed_type" || m_opt_id == "wipe_tower_wall_type")
+                    m_opt_id == "support_style" || m_opt_id == "curr_bed_type" || m_opt_id == "wipe_tower_wall_type" ||
+                    // MakerBot / UltiMaker Fork: the way back of the mapping in
+                    // set_value(). The list hides the legacy flavors, so from
+                    // makerbot_legacy on a position is not the enum value: read
+                    // as a position, makerbot_legacy (position 5) was stored
+                    // as 5, RepRap/Sprinter.
+                    m_opt_id == "gcode_flavor")
         {
             const std::string &key = m_opt.enum_values[field->GetSelection()];
             m_value = int(m_opt.enum_keys_map->at(key));
