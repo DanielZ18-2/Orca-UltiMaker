@@ -17639,6 +17639,35 @@ bool Plater::priv::run_textured_mesh_import_dialog(Slic3r::Model& loaded_model, 
     return true;
 }
 
+// MakerBot / UltiMaker Fork: of the physical filaments in slots (project
+// index, colour), the one whose colour is nearest to hex, by the CIEDE2000
+// distance the texture dialog matches with. Returns its project index; 0 if
+// slots is empty.
+static int nearest_physical_filament(const std::vector<std::pair<int, std::string>>& slots, const std::string& hex)
+{
+    auto rgb_of = [](const std::string& h) {
+        std::array<std::size_t, 3> c{128, 128, 128};
+        if (h.size() >= 7 && h[0] == '#') {
+            const unsigned long v = std::strtoul(h.substr(1, 6).c_str(), nullptr, 16);
+            c = {std::size_t((v >> 16) & 0xFF), std::size_t((v >> 8) & 0xFF), std::size_t(v & 0xFF)};
+        }
+        return c;
+    };
+    const std::array<std::size_t, 3> want = rgb_of(hex);
+    int    best       = -1;
+    double best_delta = std::numeric_limits<double>::max();
+    for (const auto& [index, colour] : slots) {
+        const std::array<std::size_t, 3> have = rgb_of(colour);
+        const std::array<float, 4> have_rgba{have[0] / 255.f, have[1] / 255.f, have[2] / 255.f, 1.f};
+        const double delta = Slic3r::compute_delta_e(want, have_rgba);
+        if (delta < best_delta) {
+            best_delta = delta;
+            best       = index;
+        }
+    }
+    return best < 0 ? 0 : best;
+}
+
 void Plater::priv::apply_textured_mesh_import_result(Slic3r::Model& loaded_model, const std::vector<size_t>& obj_idxs,
                                                      const TextureImportResult& result,
                                                      LoadProgressCallback progress_callback, bool update_scene)
@@ -17697,19 +17726,56 @@ void Plater::priv::apply_textured_mesh_import_result(Slic3r::Model& loaded_model
     }
 
     size_t new_physical_order = 0;
+    // MakerBot / UltiMaker Fork: add_custom_filament() refuses a slot the
+    // printer does not have (fixed material: one filament per extruder). A
+    // colour that gets no slot goes to the physical filament of the nearest
+    // colour -- one that was there or one added in this pass, as the dialog
+    // itself matches past its own limit -- and the mixed filaments move only
+    // by the slots that were really added.
+    size_t refused = 0;
+    std::vector<std::pair<int, std::string>> physical_slots;
+    for (const auto& entry : entries)
+        if (entry.kind == TextureFilamentKind::ExistingPhysical)
+            physical_slots.emplace_back(int(entry.project_config_index), entry.color_hex);
     for (const auto& entry : entries) {
         if (entry.kind != TextureFilamentKind::NewPhysical)
             continue;
         wxColour new_col(entry.color_hex);
         const size_t final_idx = existing_physical_count + new_physical_order;
+        const size_t physical_before = wxGetApp().preset_bundle->num_physical_filaments();
         sidebar->add_custom_filament(new_col, entry.preset_name);
+        if (wxGetApp().preset_bundle->num_physical_filaments() <= physical_before) {
+            const int nearest = nearest_physical_filament(physical_slots, entry.color_hex);
+            if (entry.dialog_index >= 0 && entry.dialog_index < (int)filament_index_remap.size())
+                filament_index_remap[entry.dialog_index] = nearest;
+            BOOST_LOG_TRIVIAL(info) << "handle_textured_mesh_import: no filament slot for dialog="
+                                    << entry.dialog_index << " color=" << entry.color_hex
+                                    << ", assigned to existing filament " << nearest;
+            ++refused;
+            continue;
+        }
         if (entry.dialog_index >= 0 && entry.dialog_index < (int)filament_index_remap.size())
             filament_index_remap[entry.dialog_index] = (int)final_idx;
+        physical_slots.emplace_back(int(final_idx), entry.color_hex);
         BOOST_LOG_TRIVIAL(info) << "handle_textured_mesh_import: created pending physical filament dialog="
                                 << entry.dialog_index << " final=" << final_idx
                                 << " color=" << entry.color_hex
                                 << " preset=" << entry.preset_name;
         ++new_physical_order;
+    }
+    if (refused > 0) {
+        for (const auto& entry : entries)
+            if (entry.kind == TextureFilamentKind::ExistingMixed && entry.dialog_index >= 0 &&
+                entry.dialog_index < (int)filament_index_remap.size())
+                filament_index_remap[entry.dialog_index] = (int)(entry.project_config_index + new_physical_order);
+        notification_manager->push_notification(NotificationType::CustomNotification,
+                                                NotificationManager::NotificationLevel::WarningNotificationLevel,
+                                                format(_L_PLURAL("The printer has no free filament slot for %1% colour of the texture. "
+                                                                 "It was assigned to the nearest existing filament.",
+                                                                 "The printer has no free filament slot for %1% colours of the texture. "
+                                                                 "They were assigned to the nearest existing filaments.",
+                                                                 refused),
+                                                       refused));
     }
 
     std::vector<std::string> physical_colors_for_mixing = collect_physical_color_strs();
@@ -17731,6 +17797,32 @@ void Plater::priv::apply_textured_mesh_import_result(Slic3r::Model& loaded_model
             BOOST_LOG_TRIVIAL(warning) << "handle_textured_mesh_import: invalid pending mixed filament dialog="
                                        << mixed.dialog_index;
             continue;
+        }
+        // MakerBot / UltiMaker Fork: a component that got no slot points at
+        // an existing filament now, possibly one the mix already holds. Fold
+        // repeated components into one with the sum of their shares; a mix
+        // left with one filament is that filament.
+        if (refused > 0) {
+            std::vector<unsigned int> folded_components;
+            std::vector<int>          folded_ratios;
+            for (size_t c = 0; c < mixed_result.components.size(); ++c) {
+                const auto it = std::find(folded_components.begin(), folded_components.end(), mixed_result.components[c]);
+                if (it == folded_components.end()) {
+                    folded_components.push_back(mixed_result.components[c]);
+                    folded_ratios.push_back(mixed_result.ratios[c]);
+                } else {
+                    folded_ratios[size_t(it - folded_components.begin())] += mixed_result.ratios[c];
+                }
+            }
+            if (folded_components.size() < 2) {
+                if (mixed.dialog_index >= 0 && mixed.dialog_index < (int)filament_index_remap.size())
+                    filament_index_remap[mixed.dialog_index] = int(folded_components.front()) - 1;
+                BOOST_LOG_TRIVIAL(info) << "handle_textured_mesh_import: mixed filament dialog=" << mixed.dialog_index
+                                        << " fell onto one filament, " << folded_components.front();
+                continue;
+            }
+            mixed_result.components = std::move(folded_components);
+            mixed_result.ratios     = std::move(folded_ratios);
         }
 
         const int final_idx = (int)wxGetApp().preset_bundle->filament_presets.size();
