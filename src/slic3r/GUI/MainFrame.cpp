@@ -2303,8 +2303,16 @@ std::vector<MainFrame::PrintSelectType> MainFrame::available_print_actions() con
     std::vector<PrintSelectType> actions;
     const auto preset_bundle      = wxGetApp().preset_bundle;
     const bool use_printer_agents = wxGetApp().app_config->get_bool("use_printer_agents");
+    // MakerBot / UltiMaker Fork: no printer agent knows a printer reached over
+    // MakerbotLink; with agents on it keeps the actions it has without them
+    // (send through MakerbotLink, export), not the agents' print and send
+    // dialogs. Same test as show_device().
+    const auto* mb_host = preset_bundle != nullptr
+        ? preset_bundle->printers.get_edited_preset().config.option<ConfigOptionEnum<PrintHostType>>("host_type")
+        : nullptr;
+    const bool makerbot_link = mb_host != nullptr && mb_host->value == htMakerbotLink;
 
-    if (preset_bundle && !preset_bundle->is_bbl_vendor() && !use_printer_agents) {
+    if (preset_bundle && !preset_bundle->is_bbl_vendor() && (!use_printer_agents || makerbot_link)) {
         // ThirdParty actions
         actions.push_back(eSendGcode);
         // Orca: when the printer accepts a .gcode.3mf (the "Support 3MF as gcode" option),

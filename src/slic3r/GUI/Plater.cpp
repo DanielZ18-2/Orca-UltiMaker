@@ -1153,6 +1153,17 @@ static int printer_filament_limit()
     return 0;
 }
 
+// MakerBot / UltiMaker Fork: a printer reached over MakerbotLink prints
+// through send_gcode_legacy() -- the native archive and the MakerBot send
+// dialog -- also with "use printer agents" on: no printer agent knows a
+// MakerBot, and the machine-select dialog would leave it unreachable. Same
+// test as MainFrame::show_device().
+static bool printer_uses_makerbot_link(const PresetBundle& bundle)
+{
+    const auto* ht = bundle.printers.get_edited_preset().config.option<ConfigOptionEnum<PrintHostType>>("host_type");
+    return ht != nullptr && ht->value == htMakerbotLink;
+}
+
 // MakerBot / UltiMaker Fork: how many filaments a machine with FIXED material
 // per extruder can hold -- one filament per extruder, no material changer.
 // 0 for every other machine.
@@ -2078,10 +2089,14 @@ void Sidebar::priv::layout_printer(bool isBBL, bool isDual)
         vsizer_printer->AddSpacer(FromDIP(SidebarProps::ContentMarginV()));
     }
 
+    // MakerBot / UltiMaker Fork: with printer agents on, isBBL is true for
+    // every printer; a MakerbotLink printer keeps its connect button -- the
+    // way to its IP and pairing -- and gets no Bambu sync button.
+    const bool makerbot_link = wxGetApp().preset_bundle != nullptr && printer_uses_makerbot_link(*wxGetApp().preset_bundle);
     //btn_connect_printer->Show(!isBBL);
-    m_printer_connect->Show(!isBBL);
+    m_printer_connect->Show(!isBBL || makerbot_link);
     //btn_sync_printer->Show(isBBL);
-    m_printer_bbl_sync->Show(isBBL);
+    m_printer_bbl_sync->Show(isBBL && !makerbot_link);
 
     // ORCA show plate type combo box only when its supported
     PresetBundle &preset_bundle = *wxGetApp().preset_bundle;
@@ -2092,7 +2107,10 @@ void Sidebar::priv::layout_printer(bool isBBL, bool isDual)
 
     // MakerBot / UltiMaker Fork: Standard AMS dual widget only for BBL.
     // For MakerBot Lava/Method + UltiMaker Method, the Smart Extruder panels are used instead.
-    const bool show_standard_dual = isDual && isBBL;
+    // Asked of the vendor, as 2.5 asks it for isDual: the isBBL argument is
+    // also true for every printer once "use printer agents" is on, and then
+    // a Method got both widgets.
+    const bool show_standard_dual = isDual && preset_bundle.is_bbl_vendor();
     extruder_dual_sizer->Show(show_standard_dual);
 
     // Smart Extruder detection (robust: works without smart_extruder_count in config)
@@ -4968,7 +4986,8 @@ void Sidebar::update_all_preset_comboboxes()
     } else {
         //p->btn_connect_printer->Show();
         // ORCA: hide the physical-printer connection button when printer agents are enabled
-        p->m_printer_connect->Show(!use_printer_agents);
+        // MakerBot / UltiMaker Fork: not for a MakerbotLink printer -- no agent knows it.
+        p->m_printer_connect->Show(!use_printer_agents || printer_uses_makerbot_link(preset_bundle));
 
         // ORCA: show/hide sync-ams button based on filament sync mode
         auto agent = wxGetApp().getAgent();
@@ -4990,7 +5009,10 @@ void Sidebar::update_all_preset_comboboxes()
             const auto host_type = cfg.option<ConfigOptionEnum<PrintHostType>>("host_type")->value;
             if (cfg.has("printhost_apikey") && (host_type != htSimplyPrint))
                 apikey = cfg.opt_string("printhost_apikey");
-            print_btn_type = (preset_bundle.is_bbl_vendor() || wxGetApp().app_config->get_bool("use_printer_agents"))
+            // MakerBot / UltiMaker Fork: a MakerbotLink printer keeps the
+            // send button of the third-party hosts with agents on as well.
+            print_btn_type = (preset_bundle.is_bbl_vendor() ||
+                              (wxGetApp().app_config->get_bool("use_printer_agents") && !printer_uses_makerbot_link(preset_bundle)))
                                  ? MainFrame::PrintSelectType::ePrintPlate
                                  : MainFrame::PrintSelectType::eSendGcode;
         }
@@ -15611,7 +15633,8 @@ void Plater::priv::on_action_print_plate(SimpleEvent&)
     }
 
     PresetBundle& preset_bundle = *wxGetApp().preset_bundle;
-    if (preset_bundle.use_bbl_network() || wxGetApp().app_config->get_bool("use_printer_agents")) {
+    if ((preset_bundle.use_bbl_network() || wxGetApp().app_config->get_bool("use_printer_agents")) &&
+        !printer_uses_makerbot_link(preset_bundle)) {
         open_machine_select_dialog(partplate_list.get_curr_plate_index());
     } else {
         q->send_gcode_legacy(PLATE_CURRENT_IDX, nullptr);
@@ -15734,7 +15757,8 @@ void Plater::priv::on_action_print_all(SimpleEvent&)
     }
 
     PresetBundle& preset_bundle = *wxGetApp().preset_bundle;
-    if (preset_bundle.use_bbl_network() || wxGetApp().app_config->get_bool("use_printer_agents")) {
+    if ((preset_bundle.use_bbl_network() || wxGetApp().app_config->get_bool("use_printer_agents")) &&
+        !printer_uses_makerbot_link(preset_bundle)) {
         open_machine_select_dialog(PLATE_ALL_IDX);
     } else {
         q->send_gcode_legacy(PLATE_ALL_IDX, nullptr);
