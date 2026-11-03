@@ -33,6 +33,30 @@ else
 fi
 
 cd ~/Orca_Dev
+
+# ---------------------------------------------------------------------------
+# Waechter: leere Objektdateien aus einem abgebrochenen Bau.
+#
+# Gefunden 2026-10-03: der Rechner hing sich mitten im Bau auf. ninja kam
+# nicht mehr dazu, die halb geschriebenen Ausgaben zu loeschen; vier .o
+# blieben mit 0 Byte liegen, neuer als ihre Quellen. ninja hielt sie fuer
+# aktuell, der naechste Bau lief bis zum Linken und scheiterte dort an
+# undefinierten Verweisen auf genau deren Symbole.
+#
+# Eine Objektdatei hat nie 0 Byte. Fehlt sie, uebersetzt ninja sie neu.
+# Andere Dateien fasst dieser Block nicht an.
+# ---------------------------------------------------------------------------
+if [ -d build ]; then
+  LEER=$(find build -type f -name '*.o' -size 0 | wc -l)
+  if [ "$LEER" -gt 0 ]; then
+    echo "WARNUNG: $LEER leere Objektdatei(en), Reste eines abgebrochenen Baus:"
+    find build -type f -name '*.o' -size 0 -print -delete
+    echo "OK: geloescht - der Bau uebersetzt sie neu."
+  else
+    echo "OK: keine leeren Objektdateien in build/"
+  fi
+fi
+
 cmake --build build --config Release --target OrcaSlicer
 echo "OK: gebaut ($(date +%H:%M:%S)). package/bin ist Symlink - nichts zu kopieren."
 
