@@ -5096,6 +5096,15 @@ void MainFrame::run_calibration(CalibKind calib_kind)
         break;
     }
     case CalibKind::PressureAdvance: {
+        // MakerBot / UltiMaker Fork: the writer drops every pressure advance
+        // command for a firmware without one (Regel 116), so a tower would
+        // print the same everywhere. The menus grey the entry out; the Speed
+        // Dial of 2.5 arrives here directly.
+        if (!printer_flavor_has_pressure_advance()) {
+            show_info(this, _L("The firmware of the selected printer has no pressure advance command. A pressure advance calibration would have no effect."),
+                      _L("Pressure Advance Calibration"));
+            break;
+        }
         if (!m_pa_calib_dlg)
             m_pa_calib_dlg = new PA_Calibration_Dlg((wxWindow*) this, wxID_ANY, m_plater);
         m_pa_calib_dlg->ShowModal();
