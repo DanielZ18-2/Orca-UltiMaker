@@ -582,7 +582,9 @@ std::string GCodeWriter::set_jerk_xy(double jerk)
 // Regel 116.
 std::string GCodeWriter::set_jerk_true(double jerk_ms3)
 {
-    if (! FLAVOR_IS(gcfCheetah))
+    // FLAVOR_IS_NOT, not "! FLAVOR_IS(...)": the macro is unbracketed, so the
+    // ! bound to the flavor alone and the comparison was always false.
+    if (FLAVOR_IS_NOT(gcfCheetah))
         return std::string();
     if (jerk_ms3 < 0.001 || is_approx(jerk_ms3, m_last_true_jerk))
         return std::string();
