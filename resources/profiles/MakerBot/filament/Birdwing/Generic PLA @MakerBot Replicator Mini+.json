@@ -1,70 +1,70 @@
 {
-    "type": "filament",
-    "setting_id": "Generic PLA @MakerBot Replicator Mini+",
-    "name": "Generic PLA @MakerBot Replicator Mini+",
-    "inherits": "fdm_filament_pla",
-    "from": "system",
-    "instantiation": "true",
-    "filament_id": "OGFL99",
-    "filament_type": [
-        "PLA"
-    ],
-    "compatible_printers": [
-        "MakerBot Replicator Mini+ 0.2 nozzle",
-        "MakerBot Replicator Mini+ 0.4 nozzle",
-        "MakerBot Replicator Mini+ 0.6 nozzle",
-        "MakerBot Replicator Mini+ 0.8 nozzle",
-        "MakerBot Replicator Mini+ 1 nozzle"
-    ],
-    "nozzle_temperature": [
-        "215"
-    ],
-    "nozzle_temperature_initial_layer": [
-        "215"
-    ],
-    "cool_plate_temp": [
-        "0"
-    ],
-    "cool_plate_temp_initial_layer": [
-        "0"
-    ],
-    "hot_plate_temp": [
-        "60"
-    ],
-    "hot_plate_temp_initial_layer": [
-        "60"
-    ],
-    "textured_plate_temp": [
-        "60"
-    ],
-    "textured_plate_temp_initial_layer": [
-        "60"
-    ],
-    "filament_diameter": [
-        "1.75"
-    ],
-    "filament_max_volumetric_speed": [
-        "9.5"
-    ],
-    "fan_min_speed": [
-        "50"
-    ],
-    "fan_max_speed": [
-        "95"
-    ],
-    "overhang_fan_speed": [
-        "95"
-    ],
-    "slow_down_layer_time": [
-        "5"
-    ],
-    "slow_down_min_speed": [
-        "6"
-    ],
-    "filament_retraction_speed": [
-        "50"
-    ],
-    "filament_deretraction_speed": [
-        "30"
-    ]
+	"type": "filament",
+	"name": "Generic PLA @MakerBot Replicator Mini+",
+	"inherits": "fdm_filament_pla",
+	"from": "system",
+	"setting_id": "aepnXk3gBk6ihqNq",
+	"filament_id": "OFDSrzZ8",
+	"instantiation": "true",
+	"filament_type": [
+		"PLA"
+	],
+	"compatible_printers": [
+		"MakerBot Replicator Mini+ 0.2 nozzle",
+		"MakerBot Replicator Mini+ 0.4 nozzle",
+		"MakerBot Replicator Mini+ 0.6 nozzle",
+		"MakerBot Replicator Mini+ 0.8 nozzle",
+		"MakerBot Replicator Mini+ 1 nozzle"
+	],
+	"nozzle_temperature": [
+		"215"
+	],
+	"nozzle_temperature_initial_layer": [
+		"215"
+	],
+	"cool_plate_temp": [
+		"0"
+	],
+	"cool_plate_temp_initial_layer": [
+		"0"
+	],
+	"hot_plate_temp": [
+		"60"
+	],
+	"hot_plate_temp_initial_layer": [
+		"60"
+	],
+	"textured_plate_temp": [
+		"60"
+	],
+	"textured_plate_temp_initial_layer": [
+		"60"
+	],
+	"filament_diameter": [
+		"1.75"
+	],
+	"filament_max_volumetric_speed": [
+		"9.5"
+	],
+	"fan_min_speed": [
+		"50"
+	],
+	"fan_max_speed": [
+		"95"
+	],
+	"overhang_fan_speed": [
+		"95"
+	],
+	"slow_down_layer_time": [
+		"5"
+	],
+	"slow_down_min_speed": [
+		"6"
+	],
+	"filament_retraction_speed": [
+		"50"
+	],
+	"filament_deretraction_speed": [
+		"30"
+	]
 }

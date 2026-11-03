@@ -1,0 +1,64 @@
+{
+	"type": "filament",
+	"name": "Generic ABS @UltiMaker 2 extended+",
+	"renamed_from": "Generic ABS @UltiMaker 2 Extended+",
+	"inherits": "fdm_filament_abs",
+	"from": "system",
+	"setting_id": "R8r1mfQFmj7eUm9Q",
+	"filament_id": "OFY9muEs",
+	"instantiation": "true",
+	"filament_type": [
+		"ABS"
+	],
+	"compatible_printers": [
+		"UltiMaker 2 extended+ 0.25 nozzle",
+		"UltiMaker 2 extended+ 0.4 nozzle",
+		"UltiMaker 2 extended+ 0.6 nozzle",
+		"UltiMaker 2 extended+ 0.8 nozzle"
+	],
+	"nozzle_temperature": [
+		"230"
+	],
+	"nozzle_temperature_initial_layer": [
+		"230"
+	],
+	"filament_diameter": [
+		"2.85"
+	],
+	"cool_plate_temp": [
+		"0"
+	],
+	"cool_plate_temp_initial_layer": [
+		"0"
+	],
+	"hot_plate_temp": [
+		"80"
+	],
+	"hot_plate_temp_initial_layer": [
+		"80"
+	],
+	"textured_plate_temp": [
+		"80"
+	],
+	"textured_plate_temp_initial_layer": [
+		"80"
+	],
+	"filament_max_volumetric_speed": [
+		"8.0"
+	],
+	"fan_min_speed": [
+		"50"
+	],
+	"fan_max_speed": [
+		"95"
+	],
+	"overhang_fan_speed": [
+		"95"
+	],
+	"slow_down_layer_time": [
+		"5"
+	],
+	"slow_down_min_speed": [
+		"9"
+	]
+}

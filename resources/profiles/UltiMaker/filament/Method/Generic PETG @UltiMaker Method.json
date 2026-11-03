@@ -1,69 +1,69 @@
 {
-    "type": "filament",
-    "setting_id": "Generic PETG @UltiMaker Method",
-    "name": "Generic PETG @UltiMaker Method",
-    "inherits": "fdm_filament_pet",
-    "from": "system",
-    "instantiation": "true",
-    "filament_id": "OGFG99",
-    "filament_type": [
-        "PETG"
-    ],
-    "filament_retraction_length": [
-        "0.75"
-    ],
-    "compatible_printers": [
-        "UltiMaker Method 0.4 nozzle"
-    ],
-    "nozzle_temperature": [
-        "230"
-    ],
-    "nozzle_temperature_initial_layer": [
-        "230"
-    ],
-    "filament_max_volumetric_speed": [
-        "10.0"
-    ],
-    "chamber_temperature": [
-        "60"
-    ],
-    "activate_chamber_temp_control": [
-        "1"
-    ],
-    "fan_min_speed": [
-        "50"
-    ],
-    "fan_max_speed": [
-        "50"
-    ],
-    "overhang_fan_speed": [
-        "50"
-    ],
-    "slow_down_layer_time": [
-        "5"
-    ],
-    "slow_down_min_speed": [
-        "8"
-    ],
-    "filament_diameter": [
-        "1.75"
-    ],
-    "hot_plate_temp": [
-        "70"
-    ],
-    "hot_plate_temp_initial_layer": [
-        "70"
-    ],
-    "textured_plate_temp": [
-        "70"
-    ],
-    "textured_plate_temp_initial_layer": [
-        "70"
-    ],
-    "cool_plate_temp": [
-        "0"
-    ],
-    "cool_plate_temp_initial_layer": [
-        "0"
-    ]
+	"type": "filament",
+	"name": "Generic PETG @UltiMaker Method",
+	"inherits": "fdm_filament_pet",
+	"from": "system",
+	"setting_id": "XcmLeKxkAlM8Hhgh",
+	"filament_id": "OFYPdQJh",
+	"instantiation": "true",
+	"filament_type": [
+		"PETG"
+	],
+	"filament_retraction_length": [
+		"0.75"
+	],
+	"compatible_printers": [
+		"UltiMaker Method 0.4 nozzle"
+	],
+	"nozzle_temperature": [
+		"230"
+	],
+	"nozzle_temperature_initial_layer": [
+		"230"
+	],
+	"filament_max_volumetric_speed": [
+		"10.0"
+	],
+	"chamber_temperature": [
+		"60"
+	],
+	"activate_chamber_temp_control": [
+		"1"
+	],
+	"fan_min_speed": [
+		"50"
+	],
+	"fan_max_speed": [
+		"50"
+	],
+	"overhang_fan_speed": [
+		"50"
+	],
+	"slow_down_layer_time": [
+		"5"
+	],
+	"slow_down_min_speed": [
+		"8"
+	],
+	"filament_diameter": [
+		"1.75"
+	],
+	"hot_plate_temp": [
+		"70"
+	],
+	"hot_plate_temp_initial_layer": [
+		"70"
+	],
+	"textured_plate_temp": [
+		"70"
+	],
+	"textured_plate_temp_initial_layer": [
+		"70"
+	],
+	"cool_plate_temp": [
+		"0"
+	],
+	"cool_plate_temp_initial_layer": [
+		"0"
+	]
 }

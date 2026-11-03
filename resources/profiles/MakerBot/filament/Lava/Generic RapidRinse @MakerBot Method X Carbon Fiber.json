@@ -1,66 +1,66 @@
 {
-    "type": "filament",
-    "setting_id": "Generic RapidRinse @MakerBot Method X Carbon Fiber",
-    "name": "Generic RapidRinse @MakerBot Method X Carbon Fiber",
-    "inherits": "fdm_filament_pva",
-    "from": "system",
-    "instantiation": "true",
-    "filament_id": "OGF8189D",
-    "filament_type": [
-        "RapidRinse"
-    ],
-    "compatible_printers": [
-        "MakerBot Method X Carbon Fiber 0.4 nozzle"
-    ],
-    "filament_diameter": [
-        "1.75"
-    ],
-    "filament_max_volumetric_speed": [
-        "9.8"
-    ],
-    "fan_min_speed": [
-        "0"
-    ],
-    "fan_max_speed": [
-        "0"
-    ],
-    "overhang_fan_speed": [
-        "0"
-    ],
-    "slow_down_layer_time": [
-        "5"
-    ],
-    "slow_down_min_speed": [
-        "8"
-    ],
-    "activate_chamber_temp_control": [
-        "1"
-    ],
-    "nozzle_temperature": [
-        "260"
-    ],
-    "nozzle_temperature_initial_layer": [
-        "260"
-    ],
-    "filament_soluble": [
-        "1"
-    ],
-    "hot_plate_temp": [
-        "95"
-    ],
-    "hot_plate_temp_initial_layer": [
-        "95"
-    ],
-    "textured_plate_temp": [
-        "95"
-    ],
-    "textured_plate_temp_initial_layer": [
-        "95"
-    ],
-    "cool_plate_temp": [
-        "0"
-    ],
-    "cool_plate_temp_initial_layer": [
-        "0"
-    ]
+	"type": "filament",
+	"name": "Generic RapidRinse @MakerBot Method X Carbon Fiber",
+	"inherits": "fdm_filament_pva",
+	"from": "system",
+	"setting_id": "6ZmbbiFQ9XnvyK2C",
+	"filament_id": "OFZCsixL",
+	"instantiation": "true",
+	"filament_type": [
+		"RapidRinse"
+	],
+	"compatible_printers": [
+		"MakerBot Method X Carbon Fiber 0.4 nozzle"
+	],
+	"filament_diameter": [
+		"1.75"
+	],
+	"filament_max_volumetric_speed": [
+		"9.8"
+	],
+	"fan_min_speed": [
+		"0"
+	],
+	"fan_max_speed": [
+		"0"
+	],
+	"overhang_fan_speed": [
+		"0"
+	],
+	"slow_down_layer_time": [
+		"5"
+	],
+	"slow_down_min_speed": [
+		"8"
+	],
+	"activate_chamber_temp_control": [
+		"1"
+	],
+	"nozzle_temperature": [
+		"260"
+	],
+	"nozzle_temperature_initial_layer": [
+		"260"
+	],
+	"filament_soluble": [
+		"1"
+	],
+	"hot_plate_temp": [
+		"95"
+	],
+	"hot_plate_temp_initial_layer": [
+		"95"
+	],
+	"textured_plate_temp": [
+		"95"
+	],
+	"textured_plate_temp_initial_layer": [
+		"95"
+	],
+	"cool_plate_temp": [
+		"0"
+	],
+	"cool_plate_temp_initial_layer": [
+		"0"
+	]
 }

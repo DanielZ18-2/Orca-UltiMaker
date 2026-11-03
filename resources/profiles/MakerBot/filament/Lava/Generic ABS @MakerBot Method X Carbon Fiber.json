@@ -1,69 +1,69 @@
 {
-    "type": "filament",
-    "setting_id": "Generic ABS @MakerBot Method X Carbon Fiber",
-    "name": "Generic ABS @MakerBot Method X Carbon Fiber",
-    "inherits": "fdm_filament_abs",
-    "from": "system",
-    "instantiation": "true",
-    "filament_id": "OGFB99",
-    "filament_type": [
-        "ABS"
-    ],
-    "compatible_printers": [
-        "MakerBot Method X Carbon Fiber 0.4 nozzle"
-    ],
-    "nozzle_temperature": [
-        "235"
-    ],
-    "nozzle_temperature_initial_layer": [
-        "235"
-    ],
-    "filament_diameter": [
-        "1.75"
-    ],
-    "filament_max_volumetric_speed": [
-        "9.8"
-    ],
-    "chamber_temperature": [
-        "87"
-    ],
-    "activate_chamber_temp_control": [
-        "1"
-    ],
-    "fan_min_speed": [
-        "0"
-    ],
-    "fan_max_speed": [
-        "0"
-    ],
-    "overhang_fan_speed": [
-        "0"
-    ],
-    "slow_down_layer_time": [
-        "5"
-    ],
-    "slow_down_min_speed": [
-        "8"
-    ],
-    "filament_retraction_length": [
-        "0.5"
-    ],
-    "hot_plate_temp": [
-        "80"
-    ],
-    "hot_plate_temp_initial_layer": [
-        "80"
-    ],
-    "textured_plate_temp": [
-        "80"
-    ],
-    "textured_plate_temp_initial_layer": [
-        "80"
-    ],
-    "cool_plate_temp": [
-        "0"
-    ],
-    "cool_plate_temp_initial_layer": [
-        "0"
-    ]
+	"type": "filament",
+	"name": "Generic ABS @MakerBot Method X Carbon Fiber",
+	"inherits": "fdm_filament_abs",
+	"from": "system",
+	"setting_id": "bIwjoeUNpOPh5fmf",
+	"filament_id": "OFY9muEs",
+	"instantiation": "true",
+	"filament_type": [
+		"ABS"
+	],
+	"compatible_printers": [
+		"MakerBot Method X Carbon Fiber 0.4 nozzle"
+	],
+	"nozzle_temperature": [
+		"235"
+	],
+	"nozzle_temperature_initial_layer": [
+		"235"
+	],
+	"filament_diameter": [
+		"1.75"
+	],
+	"filament_max_volumetric_speed": [
+		"9.8"
+	],
+	"chamber_temperature": [
+		"87"
+	],
+	"activate_chamber_temp_control": [
+		"1"
+	],
+	"fan_min_speed": [
+		"0"
+	],
+	"fan_max_speed": [
+		"0"
+	],
+	"overhang_fan_speed": [
+		"0"
+	],
+	"slow_down_layer_time": [
+		"5"
+	],
+	"slow_down_min_speed": [
+		"8"
+	],
+	"filament_retraction_length": [
+		"0.5"
+	],
+	"hot_plate_temp": [
+		"80"
+	],
+	"hot_plate_temp_initial_layer": [
+		"80"
+	],
+	"textured_plate_temp": [
+		"80"
+	],
+	"textured_plate_temp_initial_layer": [
+		"80"
+	],
+	"cool_plate_temp": [
+		"0"
+	],
+	"cool_plate_temp_initial_layer": [
+		"0"
+	]
 }

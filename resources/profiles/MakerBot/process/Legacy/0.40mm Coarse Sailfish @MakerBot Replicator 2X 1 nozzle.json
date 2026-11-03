@@ -1,15 +1,15 @@
 {
-    "type": "process",
-    "setting_id": "0.40mm Coarse Sailfish @MakerBot Replicator 2X 1 nozzle",
-    "name": "0.40mm Coarse Sailfish @MakerBot Replicator 2X 1 nozzle",
-    "inherits": "0.40mm Coarse @MakerBot Replicator 2X 1 nozzle",
-    "from": "system",
-    "instantiation": "true",
-    "description": "For printers running Sailfish firmware only. The base profile without \"Sailfish\" in its name targets the factory firmware, which has no acceleration control and can lose steps above 50 mm/s. Check the firmware before choosing this profile: Sailfish reports version 7.x with variant 0x80.",
-    "compatible_printers": [
-        "MakerBot Replicator 2X 1 nozzle"
-    ],
-    "travel_speed": "100",
-    "initial_layer_travel_speed": "100",
-    "default_acceleration": "1000"
+	"type": "process",
+	"name": "0.40mm Coarse Sailfish @MakerBot Replicator 2X 1 nozzle",
+	"inherits": "0.40mm Coarse @MakerBot Replicator 2X 1 nozzle",
+	"from": "system",
+	"setting_id": "W74FUixOWcS5CWhl",
+	"instantiation": "true",
+	"description": "For printers running Sailfish firmware only. The base profile without \"Sailfish\" in its name targets the factory firmware, which has no acceleration control and can lose steps above 50 mm/s. Check the firmware before choosing this profile: Sailfish reports version 7.x with variant 0x80.",
+	"compatible_printers": [
+		"MakerBot Replicator 2X 1 nozzle"
+	],
+	"travel_speed": "100",
+	"initial_layer_travel_speed": "100",
+	"default_acceleration": "1000"
 }

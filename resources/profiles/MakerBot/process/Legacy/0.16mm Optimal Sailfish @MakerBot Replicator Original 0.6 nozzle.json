@@ -1,19 +1,19 @@
 {
-    "type": "process",
-    "setting_id": "0.16mm Optimal Sailfish @MakerBot Replicator Original 0.6 nozzle",
-    "name": "0.16mm Optimal Sailfish @MakerBot Replicator Original 0.6 nozzle",
-    "inherits": "0.16mm Optimal @MakerBot Replicator Original 0.6 nozzle",
-    "from": "system",
-    "instantiation": "true",
-    "description": "For printers running Sailfish firmware only. The base profile without \"Sailfish\" in its name targets the factory firmware, which has no acceleration control and can lose steps above 50 mm/s. Check the firmware before choosing this profile: Sailfish reports version 7.x with variant 0x80.",
-    "compatible_printers": [
-        "MakerBot Replicator Original 0.6 nozzle"
-    ],
-    "inner_wall_speed": "80",
-    "travel_speed": "100",
-    "sparse_infill_speed": "80",
-    "internal_solid_infill_speed": "80",
-    "top_surface_speed": "80",
-    "initial_layer_travel_speed": "100",
-    "default_acceleration": "1000"
+	"type": "process",
+	"name": "0.16mm Optimal Sailfish @MakerBot Replicator Original 0.6 nozzle",
+	"inherits": "0.16mm Optimal @MakerBot Replicator Original 0.6 nozzle",
+	"from": "system",
+	"setting_id": "mRbbc1gNh5XKlIE3",
+	"instantiation": "true",
+	"description": "For printers running Sailfish firmware only. The base profile without \"Sailfish\" in its name targets the factory firmware, which has no acceleration control and can lose steps above 50 mm/s. Check the firmware before choosing this profile: Sailfish reports version 7.x with variant 0x80.",
+	"compatible_printers": [
+		"MakerBot Replicator Original 0.6 nozzle"
+	],
+	"inner_wall_speed": "80",
+	"travel_speed": "100",
+	"sparse_infill_speed": "80",
+	"internal_solid_infill_speed": "80",
+	"top_surface_speed": "80",
+	"initial_layer_travel_speed": "100",
+	"default_acceleration": "1000"
 }

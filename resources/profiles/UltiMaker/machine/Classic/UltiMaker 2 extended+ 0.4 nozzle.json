@@ -1,0 +1,96 @@
+{
+	"type": "machine",
+	"name": "UltiMaker 2 extended+ 0.4 nozzle",
+	"renamed_from": "UltiMaker 2 Extended+ 0.4 nozzle",
+	"inherits": "fdm_ultimaker_classic_common",
+	"from": "system",
+	"setting_id": "ENBg9JsL2eTECvzU",
+	"instantiation": "true",
+	"model_id": "UltiMaker 2 extended+",
+	"gcode_flavor": "ultigcode",
+	"use_relative_e_distances": "0",
+	"use_firmware_retraction": "1",
+	"printer_model": "UltiMaker 2 extended+",
+	"printer_variant": "0.4",
+	"default_print_profile": "0.20mm Standard @UltiMaker 2 extended+ 0.4 nozzle",
+	"default_filament_profile": [
+		"Generic PLA @UltiMaker 2 extended+"
+	],
+	"nozzle_diameter": [
+		"0.4"
+	],
+	"nozzle_type": [
+		"brass"
+	],
+	"extruder_type": [
+		"Bowden"
+	],
+	"printer_extruder_id": [
+		"1"
+	],
+	"z_offset": [
+		"0"
+	],
+	"host_type": "ultimakerlink",
+	"printer_vendor": "UltiMaker",
+	"makerbot_bot_type": "",
+	"printer_structure": "corexy",
+	"support_multi_bed_types": "1",
+	"printable_area": [
+		"0x0",
+		"223x0",
+		"223x223",
+		"0x223"
+	],
+	"printable_height": "305",
+	"min_layer_height": [
+		"0.08"
+	],
+	"max_layer_height": [
+		"0.32"
+	],
+	"thumbnails": "300x300/PNG",
+	"machine_max_acceleration_extruding": [
+		"2000",
+		"2000"
+	],
+	"machine_max_acceleration_retracting": [
+		"2000",
+		"2000"
+	],
+	"machine_max_speed_e": [
+		"150",
+		"150"
+	],
+	"machine_max_acceleration_x": [
+		"2000",
+		"2000"
+	],
+	"machine_max_acceleration_y": [
+		"2000",
+		"2000"
+	],
+	"machine_max_speed_x": [
+		"150",
+		"150"
+	],
+	"machine_max_speed_y": [
+		"150",
+		"150"
+	],
+	"machine_start_gcode": "G0 F3000 Y50 ;avoid prime blob",
+	"machine_end_gcode": ";Version _2.6 of the firmware can abort the print too early if the file ends\n;too soon. However if the file hasn't ended yet because there are comments at\n;the end of the file, it won't abort yet. Therefore we have to put at least 512\n;bytes at the end of the g-code so that the file is not yet finished by the\n;time that the motion planner gets flushed. With firmware version _3.3 this\n;should be fixed, so this comment wouldn't be necessary any more. Now we have\n;to pad this text to make precisely 512 bytes.",
+	"default_bed_type": "3",
+	"retraction_length": [
+		"6.5"
+	],
+	"deretraction_speed": [
+		"25"
+	],
+	"retract_restart_extra": [
+		"0"
+	],
+	"retraction_speed": [
+		"25"
+	]
+}

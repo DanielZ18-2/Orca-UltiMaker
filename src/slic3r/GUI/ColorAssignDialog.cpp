@@ -1,4 +1,5 @@
 #include "ColorAssignDialog.hpp"
+#include "ColorPickerDialog.hpp"
 
 #include "3DScene.hpp"
 #include "Camera.hpp"
@@ -476,25 +477,28 @@ void ColorAssignDialog::pick_slot_colour(size_t index)
     if (index >= m_slot_colours.size())
         return;
 
-    wxColour current = colour_from_hex(m_slot_colours[index]);
-    if (! current.IsOk())
-        current = wxColour(0, 0, 0);
-    m_clrData.SetColour(current);
-
-    // Orca's own picker, the one the sidebar opens: "Please choose the
-    // filament colour". It returns its argument unchanged when the user
-    // cancels, so the answer has to be compared against what went in --
-    // exactly what PlaterPresetComboBox::show_default_color_picker() does.
-    const wxColourData data = ::show_sys_picker_dialog(this, m_clrData);
-    if (data.GetColour() == m_clrData.GetColour())
+    // Orca's own picker, the one the sidebar opens -- as
+    // PlaterPresetComboBox::show_default_color_picker() calls it, for one
+    // solid colour without transparency: a slot holds one filament. An
+    // unreadable colour starts the picker on black. Cancel, or the same
+    // colour again, changes nothing.
+    FilamentColorPickerValue value;
+    value.colors  = {m_slot_colours[index]};
+    value.primary = m_slot_colours[index];
+    const ColorSelection initial = filament_color_picker_initial(value);
+    ColorPickerDialog    dialog(this, initial, ColorPickerOptions{});
+    if (dialog.ShowModal() != wxID_OK || ! filament_color_picker_changed(initial, dialog.selection()))
+        return;
+    const FilamentColorPickerValue picked = filament_color_picker_result(*dialog.selection());
+    const wxColour colour = picked.colors.empty() ? wxColour() : colour_from_hex(picked.colors.front());
+    if (! colour.IsOk())
         return;
 
-    m_clrData.SetColour(data.GetColour());
-    m_slot_colours[index] = data.GetColour().GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
+    m_slot_colours[index] = colour.GetAsString(wxC2S_HTML_SYNTAX).ToStdString();
     m_slot_edited[index]  = true;
 
     if (index < m_slot_patches.size()) {
-        m_slot_patches[index]->SetBackgroundColour(data.GetColour());
+        m_slot_patches[index]->SetBackgroundColour(colour);
         m_slot_patches[index]->Refresh();
     }
     refresh_preview();

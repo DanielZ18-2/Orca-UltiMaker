@@ -1,66 +1,66 @@
 {
-    "type": "filament",
-    "setting_id": "Generic SR-30 @UltiMaker Method XL",
-    "name": "Generic SR-30 @UltiMaker Method XL",
-    "inherits": "fdm_filament_pva",
-    "from": "system",
-    "instantiation": "true",
-    "filament_id": "OGF48A0C",
-    "filament_type": [
-        "SR-30"
-    ],
-    "compatible_printers": [
-        "UltiMaker Method XL 0.4 nozzle"
-    ],
-    "filament_diameter": [
-        "1.75"
-    ],
-    "filament_max_volumetric_speed": [
-        "12.0"
-    ],
-    "fan_min_speed": [
-        "0"
-    ],
-    "fan_max_speed": [
-        "0"
-    ],
-    "overhang_fan_speed": [
-        "0"
-    ],
-    "slow_down_layer_time": [
-        "5"
-    ],
-    "slow_down_min_speed": [
-        "8"
-    ],
-    "activate_chamber_temp_control": [
-        "1"
-    ],
-    "cool_plate_temp": [
-        "0"
-    ],
-    "cool_plate_temp_initial_layer": [
-        "0"
-    ],
-    "nozzle_temperature": [
-        "255"
-    ],
-    "nozzle_temperature_initial_layer": [
-        "255"
-    ],
-    "hot_plate_temp": [
-        "95"
-    ],
-    "hot_plate_temp_initial_layer": [
-        "95"
-    ],
-    "textured_plate_temp": [
-        "95"
-    ],
-    "textured_plate_temp_initial_layer": [
-        "95"
-    ],
-    "filament_soluble": [
-        "1"
-    ]
+	"type": "filament",
+	"name": "Generic SR-30 @UltiMaker Method XL",
+	"inherits": "fdm_filament_pva",
+	"from": "system",
+	"setting_id": "jzjNZRy6GHXQ8nLk",
+	"filament_id": "OFFhF4dx",
+	"instantiation": "true",
+	"filament_type": [
+		"SR-30"
+	],
+	"compatible_printers": [
+		"UltiMaker Method XL 0.4 nozzle"
+	],
+	"filament_diameter": [
+		"1.75"
+	],
+	"filament_max_volumetric_speed": [
+		"12.0"
+	],
+	"fan_min_speed": [
+		"0"
+	],
+	"fan_max_speed": [
+		"0"
+	],
+	"overhang_fan_speed": [
+		"0"
+	],
+	"slow_down_layer_time": [
+		"5"
+	],
+	"slow_down_min_speed": [
+		"8"
+	],
+	"activate_chamber_temp_control": [
+		"1"
+	],
+	"cool_plate_temp": [
+		"0"
+	],
+	"cool_plate_temp_initial_layer": [
+		"0"
+	],
+	"nozzle_temperature": [
+		"255"
+	],
+	"nozzle_temperature_initial_layer": [
+		"255"
+	],
+	"hot_plate_temp": [
+		"95"
+	],
+	"hot_plate_temp_initial_layer": [
+		"95"
+	],
+	"textured_plate_temp": [
+		"95"
+	],
+	"textured_plate_temp_initial_layer": [
+		"95"
+	],
+	"filament_soluble": [
+		"1"
+	]
 }

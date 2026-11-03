@@ -1,78 +1,78 @@
 {
-    "type": "process",
-    "setting_id": "0.24mm Draft @UltiMaker Factor 4+ 0.4 nozzle",
-    "name": "0.24mm Draft @UltiMaker Factor 4+ 0.4 nozzle",
-    "inherits": "fdm_process_ultimaker_common",
-    "from": "system",
-    "instantiation": "true",
-    "layer_height": "0.24",
-    "initial_layer_print_height": "0.24",
-    "compatible_printers": [
-        "UltiMaker Factor 4+ 0.4 nozzle"
-    ],
-    "bottom_shell_layers": "5",
-    "bottom_shell_thickness": "1.20",
-    "top_shell_layers": "5",
-    "top_shell_thickness": "1.20",
-    "line_width": "0.42",
-    "outer_wall_line_width": "0.42",
-    "inner_wall_line_width": "0.42",
-    "sparse_infill_line_width": "0.42",
-    "internal_solid_infill_line_width": "0.42",
-    "top_surface_line_width": "0.42",
-    "support_line_width": "0.525",
-    "initial_layer_line_width": "0.525",
-    "outer_wall_speed": "50",
-    "inner_wall_speed": "104",
-    "travel_speed": "125",
-    "bridge_speed": "62.5",
-    "sparse_infill_speed": "104",
-    "internal_solid_infill_speed": "104",
-    "gap_infill_speed": "104",
-    "top_surface_speed": "25",
-    "support_speed": "83",
-    "initial_layer_speed": "50",
-    "initial_layer_travel_speed": "125",
-    "default_acceleration": "10000",
-    "outer_wall_acceleration": "10000",
-    "inner_wall_acceleration": "10000",
-    "bridge_acceleration": "10000",
-    "sparse_infill_acceleration": "10000",
-    "internal_solid_infill_acceleration": "10000",
-    "travel_acceleration": "5000",
-    "initial_layer_acceleration": "4000",
-    "initial_layer_travel_acceleration": "4000",
-    "top_surface_acceleration": "10000",
-    "initial_layer_infill_speed": "50",
-    "support_interface_speed": "83",
-    "sparse_infill_density": "10%",
-    "support_type": "tree(auto)",
-    "support_base_pattern": "lightning",
-    "support_object_xy_distance": "1.2",
-    "support_top_z_distance": "0.3",
-    "support_bottom_z_distance": "0.3",
-    "cheetah_default_jerk": [
-        "5000"
-    ],
-    "cheetah_outer_wall_jerk": [
-        "1000"
-    ],
-    "cheetah_inner_wall_jerk": [
-        "5000"
-    ],
-    "cheetah_infill_jerk": [
-        "5000"
-    ],
-    "cheetah_top_surface_jerk": [
-        "1000"
-    ],
-    "cheetah_initial_layer_jerk": [
-        "2500"
-    ],
-    "cheetah_travel_jerk": [
-        "5000"
-    ],
-    "cheetah_initial_layer_travel_jerk": [
-        "5000"
-    ]
+	"type": "process",
+	"name": "0.24mm Draft @UltiMaker Factor 4+ 0.4 nozzle",
+	"inherits": "fdm_process_ultimaker_common",
+	"from": "system",
+	"setting_id": "xVeG5IS2xeP7Nzo4",
+	"instantiation": "true",
+	"layer_height": "0.24",
+	"initial_layer_print_height": "0.24",
+	"compatible_printers": [
+		"UltiMaker Factor 4+ 0.4 nozzle"
+	],
+	"bottom_shell_layers": "5",
+	"bottom_shell_thickness": "1.20",
+	"top_shell_layers": "5",
+	"top_shell_thickness": "1.20",
+	"line_width": "0.42",
+	"outer_wall_line_width": "0.42",
+	"inner_wall_line_width": "0.42",
+	"sparse_infill_line_width": "0.42",
+	"internal_solid_infill_line_width": "0.42",
+	"top_surface_line_width": "0.42",
+	"support_line_width": "0.525",
+	"initial_layer_line_width": "0.525",
+	"outer_wall_speed": "50",
+	"inner_wall_speed": "104",
+	"travel_speed": "125",
+	"bridge_speed": "62.5",
+	"sparse_infill_speed": "104",
+	"internal_solid_infill_speed": "104",
+	"gap_infill_speed": "104",
+	"top_surface_speed": "25",
+	"support_speed": "83",
+	"initial_layer_speed": "50",
+	"initial_layer_travel_speed": "125",
+	"default_acceleration": "10000",
+	"outer_wall_acceleration": "10000",
+	"inner_wall_acceleration": "10000",
+	"bridge_acceleration": "10000",
+	"sparse_infill_acceleration": "10000",
+	"internal_solid_infill_acceleration": "10000",
+	"travel_acceleration": "5000",
+	"initial_layer_acceleration": "4000",
+	"initial_layer_travel_acceleration": "4000",
+	"top_surface_acceleration": "10000",
+	"initial_layer_infill_speed": "50",
+	"support_interface_speed": "83",
+	"sparse_infill_density": "10%",
+	"support_type": "tree(auto)",
+	"support_base_pattern": "lightning",
+	"support_object_xy_distance": "1.2",
+	"support_top_z_distance": "0.3",
+	"support_bottom_z_distance": "0.3",
+	"cheetah_default_jerk": [
+		"5000"
+	],
+	"cheetah_outer_wall_jerk": [
+		"1000"
+	],
+	"cheetah_inner_wall_jerk": [
+		"5000"
+	],
+	"cheetah_infill_jerk": [
+		"5000"
+	],
+	"cheetah_top_surface_jerk": [
+		"1000"
+	],
+	"cheetah_initial_layer_jerk": [
+		"2500"
+	],
+	"cheetah_travel_jerk": [
+		"5000"
+	],
+	"cheetah_initial_layer_travel_jerk": [
+		"5000"
+	]
 }

@@ -3,7 +3,6 @@
 
 #include "GUI_Utils.hpp"
 
-#include <wx/colourdata.h>
 #include <wx/statbmp.h>
 
 #include <string>
@@ -48,8 +47,7 @@ namespace Slic3r { namespace GUI {
 // the printer's slot colour is a property of the machine in front of the
 // user, the model's colour is a fact carried in the file. A slot's colour is
 // changed by clicking its swatch or by its "Change" button -- both open
-// Orca's own "Please choose the filament colour" picker
-// (show_sys_picker_dialog(), wxExtensions.hpp), the same dialog the sidebar
+// Orca's own colour picker (ColorPickerDialog), the same dialog the sidebar
 // opens, not a second one of our own. The button exists because a click
 // cannot be done from the keyboard.
 class ColorAssignDialog : public DPIDialog
@@ -155,7 +153,6 @@ private:
     std::vector<wxWindow *>  m_slot_patches;   // one per printer slot
     std::vector<std::string> m_slot_colours;   // as edited in this dialog
     std::vector<bool>        m_slot_edited;    // true where the user picked
-    wxColourData             m_clrData;        // keeps the custom colours alive
     size_t                   m_slot_count{0};
     bool                     m_adopt_colours{false};
 };

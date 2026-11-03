@@ -1,60 +1,60 @@
 {
-    "type": "filament",
-    "setting_id": "Generic PLA @MakerBot Sketch Large",
-    "name": "Generic PLA @MakerBot Sketch Large",
-    "inherits": "fdm_filament_pla",
-    "from": "system",
-    "instantiation": "true",
-    "filament_id": "OGFL99",
-    "filament_type": [
-        "PLA"
-    ],
-    "compatible_printers": [
-        "MakerBot Sketch Large 0.4 nozzle"
-    ],
-    "nozzle_temperature": [
-        "210"
-    ],
-    "nozzle_temperature_initial_layer": [
-        "210"
-    ],
-    "cool_plate_temp": [
-        "0"
-    ],
-    "cool_plate_temp_initial_layer": [
-        "0"
-    ],
-    "hot_plate_temp": [
-        "50"
-    ],
-    "hot_plate_temp_initial_layer": [
-        "50"
-    ],
-    "textured_plate_temp": [
-        "50"
-    ],
-    "textured_plate_temp_initial_layer": [
-        "50"
-    ],
-    "filament_diameter": [
-        "1.75"
-    ],
-    "filament_max_volumetric_speed": [
-        "6.0"
-    ],
-    "fan_min_speed": [
-        "100"
-    ],
-    "fan_max_speed": [
-        "100"
-    ],
-    "overhang_fan_speed": [
-        "100"
-    ],
-    "slow_down_layer_time": [
-        "5"
-    ],
-    "slow_down_min_speed": [
-        "8"
-    ]
+	"type": "filament",
+	"name": "Generic PLA @MakerBot Sketch Large",
+	"inherits": "fdm_filament_pla",
+	"from": "system",
+	"setting_id": "sMnm6SY8p80ZdO8G",
+	"filament_id": "OFDSrzZ8",
+	"instantiation": "true",
+	"filament_type": [
+		"PLA"
+	],
+	"compatible_printers": [
+		"MakerBot Sketch Large 0.4 nozzle"
+	],
+	"nozzle_temperature": [
+		"210"
+	],
+	"nozzle_temperature_initial_layer": [
+		"210"
+	],
+	"cool_plate_temp": [
+		"0"
+	],
+	"cool_plate_temp_initial_layer": [
+		"0"
+	],
+	"hot_plate_temp": [
+		"50"
+	],
+	"hot_plate_temp_initial_layer": [
+		"50"
+	],
+	"textured_plate_temp": [
+		"50"
+	],
+	"textured_plate_temp_initial_layer": [
+		"50"
+	],
+	"filament_diameter": [
+		"1.75"
+	],
+	"filament_max_volumetric_speed": [
+		"6.0"
+	],
+	"fan_min_speed": [
+		"100"
+	],
+	"fan_max_speed": [
+		"100"
+	],
+	"overhang_fan_speed": [
+		"100"
+	],
+	"slow_down_layer_time": [
+		"5"
+	],
+	"slow_down_min_speed": [
+		"8"
+	]
 }

@@ -1,14 +1,14 @@
 {
-    "type": "process",
-    "setting_id": "0.16mm Optimal Sailfish @MakerBot Cupcake CNC 0.6 nozzle",
-    "name": "0.16mm Optimal Sailfish @MakerBot Cupcake CNC 0.6 nozzle",
-    "inherits": "0.16mm Optimal @MakerBot Cupcake CNC 0.6 nozzle",
-    "from": "system",
-    "instantiation": "true",
-    "description": "For printers running Sailfish firmware only. The base profile without \"Sailfish\" in its name targets the factory firmware, which has no acceleration control and can lose steps above 50 mm/s. Check the firmware before choosing this profile: Sailfish reports version 7.x with variant 0x80.",
-    "compatible_printers": [
-        "MakerBot Cupcake CNC 0.6 nozzle"
-    ],
-    "initial_layer_travel_speed": "60",
-    "default_acceleration": "500"
+	"type": "process",
+	"name": "0.16mm Optimal Sailfish @MakerBot Cupcake CNC 0.6 nozzle",
+	"inherits": "0.16mm Optimal @MakerBot Cupcake CNC 0.6 nozzle",
+	"from": "system",
+	"setting_id": "mmNbFGRx0rBIS2nA",
+	"instantiation": "true",
+	"description": "For printers running Sailfish firmware only. The base profile without \"Sailfish\" in its name targets the factory firmware, which has no acceleration control and can lose steps above 50 mm/s. Check the firmware before choosing this profile: Sailfish reports version 7.x with variant 0x80.",
+	"compatible_printers": [
+		"MakerBot Cupcake CNC 0.6 nozzle"
+	],
+	"initial_layer_travel_speed": "60",
+	"default_acceleration": "500"
 }
