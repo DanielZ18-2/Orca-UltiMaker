@@ -17098,48 +17098,14 @@ void Plater::export_gcode(bool prefer_removable)
     fs::path output_path;
     {
         std::string ext = default_output_file.extension().string();
-        // MakerBot / UltiMaker Fork: use native format in Save dialog
-        // Resolve gcode_flavor with inheritance (user copies inherit but may not store it)
-        GCodeFlavor _gcf_val = gcfMarlinLegacy;
-        {
-            const auto& _pc = wxGetApp().preset_bundle->printers;
-            const auto& _ep = _pc.get_edited_preset();
-            // First: try direct config lookup
-            if (const auto* g = _ep.config.opt<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor"))
-                _gcf_val = g->value;
-            else {
-                // Fallback: walk inheritance chain
-                std::string _inh = _ep.config.opt_string("inherits");
-                for (int _d = 0; _d < 5 && !_inh.empty(); ++_d) {
-                    if (const Preset* _pp = _pc.find_preset(_inh, false)) {
-                        if (const auto* g2 = _pp->config.opt<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor")) {
-                            _gcf_val = g2->value; break;
-                        }
-                        _inh = _pp->config.opt_string("inherits");
-                    } else break;
-                }
-                // Last resort: check printer name
-                if (_gcf_val == gcfMarlinLegacy) {
-                    const std::string& _pn = _ep.name;
-                    if (_pn.find("Method") != std::string::npos)
-                        _gcf_val = gcfMakerBotLava;
-                    else if (_pn.find("MakerBot") != std::string::npos &&
-                             _pn.find("Replicator 2") == std::string::npos &&
-                             _pn.find("Original") == std::string::npos &&
-                             _pn.find("Cupcake") == std::string::npos)
-                        _gcf_val = gcfMakerBotBirdwing;
-                    else if (_pn.find("Replicator") != std::string::npos ||
-                             _pn.find("Cupcake") != std::string::npos ||
-                             _pn.find("Thing-O-Matic") != std::string::npos ||
-                             _pn.find("ThingOMatic") != std::string::npos)
-                        // Cupcake through Replicator 2X: pre-Birdwing Sailfish/legacy
-                        // lineage, exported as plain .gcode + GPX-converted .x3g.
-                        _gcf_val = gcfMakerBotLegacy;
-                    else if (_pn.find("UltiMaker") != std::string::npos)
-                        _gcf_val = gcfGriffin;
-                }
-            }
-        }
+        // MakerBot / UltiMaker Fork: offer the format the export will write.
+        // The edited preset holds its whole config, gcode_flavor included. As
+        // loaded from a profile it keeps enums as ConfigOptionEnumGeneric, so
+        // opt<ConfigOptionEnum<GCodeFlavor>>() fails there; getInt() reads
+        // both kinds of enum option.
+        const Preset            &_printer_preset = wxGetApp().preset_bundle->printers.get_edited_preset();
+        const ConfigOption      *_gcf_opt        = _printer_preset.config.option("gcode_flavor");
+        const GCodeFlavor        _gcf_val        = _gcf_opt ? static_cast<GCodeFlavor>(_gcf_opt->getInt()) : gcfMarlinLegacy;
         const wxString _wildcards =
             (_gcf_val == gcfMakerBotBirdwing || _gcf_val == gcfMakerBotLava)
                 ? _L("MakerBot Archive (*.makerbot)|*.makerbot|G-code (*.gcode)|*.gcode")
@@ -17164,6 +17130,10 @@ void Plater::export_gcode(bool prefer_removable)
             _out_file = _out_file.parent_path() / (_out_file.stem().string() + ".ufp");
         else if (_gcf_val == gcfMakerBotLegacy)
             _out_file = _out_file.parent_path() / (_out_file.stem().string() + ".x3g");
+        BOOST_LOG_TRIVIAL(info) << "export dialog: printer \"" << _printer_preset.name
+                                << "\", gcode_flavor=" << (_gcf_opt ? _gcf_opt->serialize() : std::string("none"))
+                                << ", proposes \"" << _out_file.filename().string()
+                                << "\", filter \"" << into_u8(_wildcards.BeforeFirst('|')) << "\"";
         wxFileDialog dlg(this, _dlg_title,
             start_dir,
             from_path(_out_file.filename()),
