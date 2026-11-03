@@ -18050,9 +18050,12 @@ void Plater::load_project(wxString const& filename2,
     // clears load_config for both, mostly with "... loading geometry data
     // only.". Such a file is not the project either, any more than after
     // "Import geometry only": adopted, Save wrote the user's printer and
-    // process into a file that never carried any.
+    // process into a file that never carried any. A published 3MF keeps 2.5's
+    // own handling below (a new project, "Untitled"), also when its settings
+    // did not load.
     if (!res.empty() && !geometry_only && !load_restore && !(strategy & LoadStrategy::Silence) &&
-        !using_exported_file() && !p->last_3mf_was_project && boost::algorithm::iends_with(path.string(), ".3mf")) {
+        !using_exported_file() && !loaded_published && !p->last_3mf_was_project &&
+        boost::algorithm::iends_with(path.string(), ".3mf")) {
         geometry_only = true;
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << __LINE__
                                 << " only the geometry was taken out of the file: " << filename;
