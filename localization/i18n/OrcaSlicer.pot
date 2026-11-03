@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:48+0000\n"
+"POT-Creation-Date: 2026-11-03 19:35+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -7329,6 +7329,12 @@ msgstr ""
 msgid "The project is no longer available."
 msgstr ""
 
+msgid "The firmware of the selected printer has no pressure advance command. A pressure advance calibration would have no effect."
+msgstr ""
+
+msgid "Pressure Advance Calibration"
+msgstr ""
+
 msgid ""
 "Do you want to synchronize your personal data from Orca Cloud?\n"
 "It contains the following information:\n"
@@ -8142,9 +8148,6 @@ msgid "Export All Sliced Files"
 msgstr ""
 
 msgid "Max Volumetric Speed Calibration"
-msgstr ""
-
-msgid "Pressure Advance Calibration"
 msgstr ""
 
 msgid "Flow Ratio Calibration"
@@ -9469,6 +9472,12 @@ msgstr ""
 
 msgid "Applying texture colors..."
 msgstr ""
+
+#, possible-boost-format
+msgid "The printer has no free filament slot for %1% colour of the texture. It was assigned to the nearest existing filament."
+msgid_plural "The printer has no free filament slot for %1% colours of the texture. They were assigned to the nearest existing filaments."
+msgstr[0] ""
+msgstr[1] ""
 
 msgid "Updating 3D view..."
 msgstr ""

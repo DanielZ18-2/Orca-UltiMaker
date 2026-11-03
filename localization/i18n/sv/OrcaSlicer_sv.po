@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:48+0000\n"
+"POT-Creation-Date: 2026-11-03 19:35+0000\n"
 "Language: sv\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -8720,6 +8720,13 @@ msgstr "Filen saknas"
 msgid "The project is no longer available."
 msgstr "Detta projekt är inte tillgängligt."
 
+msgid "The firmware of the selected printer has no pressure advance command. A pressure advance calibration would have no effect."
+msgstr ""
+
+# AI Translated
+msgid "Pressure Advance Calibration"
+msgstr "Pressure Advance-kalibrering"
+
 # AI Translated
 msgid ""
 "Do you want to synchronize your personal data from Orca Cloud?\n"
@@ -9677,10 +9684,6 @@ msgstr "Exportera alla beredda filer"
 
 msgid "Max Volumetric Speed Calibration"
 msgstr "Max volymetrisk hastighets kalibrering"
-
-# AI Translated
-msgid "Pressure Advance Calibration"
-msgstr "Pressure Advance-kalibrering"
 
 # AI Translated
 msgid "Flow Ratio Calibration"
@@ -11293,6 +11296,12 @@ msgstr "Texturimporten misslyckades. Modellen verkar innehålla texturdata, men 
 # AI Translated
 msgid "Applying texture colors..."
 msgstr "Tillämpar texturfärger..."
+
+#, boost-format
+msgid "The printer has no free filament slot for %1% colour of the texture. It was assigned to the nearest existing filament."
+msgid_plural "The printer has no free filament slot for %1% colours of the texture. They were assigned to the nearest existing filaments."
+msgstr[0] ""
+msgstr[1] ""
 
 # AI Translated
 msgid "Updating 3D view..."

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OrcaSlicer 2.3.0-rc\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:48+0000\n"
+"POT-Creation-Date: 2026-11-03 19:35+0000\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Krzysztof Morga <<tlumaczeniebs@gmail.com>>\n"
 "Language-Team: \n"
@@ -8211,6 +8211,13 @@ msgstr "Plik nie istnieje"
 msgid "The project is no longer available."
 msgstr "Projekt jest już niedostępny."
 
+msgid "The firmware of the selected printer has no pressure advance command. A pressure advance calibration would have no effect."
+msgstr ""
+
+# AI Translated
+msgid "Pressure Advance Calibration"
+msgstr "Kalibracja Pressure Advance"
+
 # AI Translated
 msgid ""
 "Do you want to synchronize your personal data from Orca Cloud?\n"
@@ -9100,10 +9107,6 @@ msgstr "Eksportuj wszystkie pocięte pliki"
 
 msgid "Max Volumetric Speed Calibration"
 msgstr "Kalibracja Maks. Prędkości Przepływu"
-
-# AI Translated
-msgid "Pressure Advance Calibration"
-msgstr "Kalibracja Pressure Advance"
 
 # AI Translated
 msgid "Flow Ratio Calibration"
@@ -10663,6 +10666,13 @@ msgstr "Import tekstury nie powiódł się. Model zdaje się zawierać dane teks
 # AI Translated
 msgid "Applying texture colors..."
 msgstr "Stosowanie kolorów tekstury..."
+
+#, boost-format
+msgid "The printer has no free filament slot for %1% colour of the texture. It was assigned to the nearest existing filament."
+msgid_plural "The printer has no free filament slot for %1% colours of the texture. They were assigned to the nearest existing filaments."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
 
 # AI Translated
 msgid "Updating 3D view..."

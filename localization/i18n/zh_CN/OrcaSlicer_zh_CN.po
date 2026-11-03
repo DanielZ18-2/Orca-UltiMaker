@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Slic3rPE\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 11:48+0000\n"
+"POT-Creation-Date: 2026-11-03 19:35+0000\n"
 "PO-Revision-Date: 2026-06-11 12:37-0300\n"
 "Last-Translator: Handle <mail@bysb.net>\n"
 "Language-Team: \n"
@@ -8212,6 +8212,13 @@ msgstr "文件丢失"
 msgid "The project is no longer available."
 msgstr "此项目不可用。"
 
+msgid "The firmware of the selected printer has no pressure advance command. A pressure advance calibration would have no effect."
+msgstr ""
+
+# AI Translated
+msgid "Pressure Advance Calibration"
+msgstr "Pressure Advance 校准"
+
 # AI Translated
 msgid ""
 "Do you want to synchronize your personal data from Orca Cloud?\n"
@@ -9117,10 +9124,6 @@ msgstr "导出所有切片文件"
 
 msgid "Max Volumetric Speed Calibration"
 msgstr "最大体积流量校准"
-
-# AI Translated
-msgid "Pressure Advance Calibration"
-msgstr "Pressure Advance 校准"
 
 # AI Translated
 msgid "Flow Ratio Calibration"
@@ -10664,6 +10667,11 @@ msgstr "纹理导入失败。模型中似乎包含纹理数据，但纹理导入
 # AI Translated
 msgid "Applying texture colors..."
 msgstr "正在应用纹理颜色..."
+
+#, boost-format
+msgid "The printer has no free filament slot for %1% colour of the texture. It was assigned to the nearest existing filament."
+msgid_plural "The printer has no free filament slot for %1% colours of the texture. They were assigned to the nearest existing filaments."
+msgstr[0] ""
 
 # AI Translated
 msgid "Updating 3D view..."
