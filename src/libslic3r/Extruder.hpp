@@ -45,6 +45,10 @@ public:
     // E() plus extra, as written to the G-code for the current move. high_precision is the precision of that move,
     // see GCodeWriter::high_precision().
     double E_to_emit(bool high_precision, double extra = 0.);
+    // MakerBot / UltiMaker Fork: E_to_emit() for a dialect that writes E times
+    // scale (UltiGCode: mm3 of material). The rounding carry is kept in the
+    // written unit, so relative E adds up as written.
+    double E_to_emit_scaled(bool high_precision, double scale, double extra = 0.);
     void   reset_E() { m_E = 0.; m_share_E[extruder_id()] = 0.; }
     // e_per_mm is extrusion_per_mm = geometric volume * (filament flow ratio / cross-sectional area)  [Doesn't account for print_flow_ratio, or modifiers like bridge flow ratio etc.]
     double e_per_mm(double mm3_per_mm) const { return mm3_per_mm * m_e_per_mm3; }

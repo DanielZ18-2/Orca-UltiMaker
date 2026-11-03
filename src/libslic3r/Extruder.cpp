@@ -83,6 +83,18 @@ double Extruder::E_to_emit(bool high_precision, double extra)
     return emitted;
 }
 
+// MakerBot / UltiMaker Fork: see Extruder.hpp.
+double Extruder::E_to_emit_scaled(bool high_precision, double scale, double extra)
+{
+    const double e = (this->E() + extra) * scale;
+    if (! m_config->use_relative_e_distances.value || ! high_precision)
+        return e;
+    const double carried = e + m_E_rounding_carry;
+    const double emitted = GCodeFormatter::quantize_e(carried, true);
+    m_E_rounding_carry   = carried - emitted;
+    return emitted;
+}
+
 /* This method makes sure the extruder is retracted by the specified amount
    of filament and returns the amount of filament retracted.
    If the extruder is already retracted by the same or a greater amount,

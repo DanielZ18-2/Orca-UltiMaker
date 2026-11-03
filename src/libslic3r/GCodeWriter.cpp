@@ -1383,13 +1383,15 @@ bool GCodeWriter::will_move_z(double z) const
 // Orca keeps counting mm of filament inside, for the statistics, the
 // retraction and the placeholders, so the conversion happens here, on output,
 // and nowhere else. Absolute or relative, E times the cross section is the
-// right map, and G92 E0 stays 0. Every other flavor writes what
-// Extruder::E_to_emit() hands out, which carries the rounding of relative
-// E from move to move.
+// right map, and G92 E0 stays 0. Both ways carry the rounding of relative E
+// from move to move, as 2.5 does: UltiGCode in mm3 through
+// Extruder::E_to_emit_scaled(), every other flavor in mm through
+// Extruder::E_to_emit(). Absolute E needs no carry.
 double GCodeWriter::output_e(bool high_precision, double extra)
 {
     Extruder *f = filament();
-    return FLAVOR_IS(gcfUltiGCode) ? (f->E() + extra) * f->filament_crossection() : f->E_to_emit(high_precision, extra);
+    return FLAVOR_IS(gcfUltiGCode) ? f->E_to_emit_scaled(high_precision, f->filament_crossection(), extra)
+                                   : f->E_to_emit(high_precision, extra);
 }
 
 // MakerBot / UltiMaker Fork: UltiGCode retracts in the machine, G10/G11 with
