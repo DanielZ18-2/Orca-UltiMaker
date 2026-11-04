@@ -25,6 +25,14 @@
 	"extruder_type": [
 		"Bowden"
 	],
+	"extruder_variant_list": [
+		"Bowden Standard",
+		"Bowden Standard"
+	],
+	"printer_extruder_variant": [
+		"Bowden Standard",
+		"Bowden Standard"
+	],
 	"printer_extruder_id": [
 		"1",
 		"2"
