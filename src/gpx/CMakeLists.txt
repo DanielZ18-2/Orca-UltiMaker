@@ -91,6 +91,15 @@ else ()
     endif ()
 endif ()
 
+# gpx.c wraps strncpy0() in "#pragma GCC diagnostic ignored
+# -Wstringop-truncation". Clang - also clang-cl and Apple Clang, which the CI
+# builds use - does not know that warning and reports
+# -Wunknown-warning-option, which the -Werror of Clang builds turns into an
+# error. Accept the unknown name for that one file instead of patching it.
+if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+    set_source_files_properties(gpx.c PROPERTIES COMPILE_OPTIONS -Wno-unknown-warning-option)
+endif ()
+
 find_library(GPX_MATH_LIBRARY m)
 if (GPX_MATH_LIBRARY)
     target_link_libraries(gpx PRIVATE ${GPX_MATH_LIBRARY})
