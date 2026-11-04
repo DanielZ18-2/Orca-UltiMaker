@@ -92,8 +92,32 @@
 			"sub_path": "process/fdm_process_common.json"
 		},
 		{
+			"name": "fdm_process_ultimaker_upstream_common",
+			"sub_path": "process/fdm_process_ultimaker_upstream_common.json"
+		},
+		{
 			"name": "fdm_process_ultimaker_common",
 			"sub_path": "process/fdm_process_ultimaker_common.json"
+		},
+		{
+			"name": "0.10mm Fine @UltiMaker 2",
+			"sub_path": "process/Classic/0.10mm Fine @UltiMaker 2.json"
+		},
+		{
+			"name": "0.15mm Standard @UltiMaker 2",
+			"sub_path": "process/Classic/0.15mm Standard @UltiMaker 2.json"
+		},
+		{
+			"name": "0.15mm Standard @UltiMaker 2 0.6 nozzle",
+			"sub_path": "process/Classic/0.15mm Standard @UltiMaker 2 0.6 nozzle.json"
+		},
+		{
+			"name": "0.18mm Standard @UltiMaker S5",
+			"sub_path": "process/SSERIES/0.18mm Standard @UltiMaker S5.json"
+		},
+		{
+			"name": "0.20mm Draft @UltiMaker 2",
+			"sub_path": "process/Classic/0.20mm Draft @UltiMaker 2.json"
 		},
 		{
 			"name": "0.05mm Extra Fine @UltiMaker Factor 4 0.25 nozzle",
@@ -1870,6 +1894,42 @@
 		{
 			"name": "0.64mm Coarse @UltiMaker S8 0.8 nozzle",
 			"sub_path": "process/SSERIES/0.64mm Coarse @UltiMaker S8 0.8 nozzle.json"
+		},
+		{
+			"name": "0.10mm Fine @UltiMaker 2+",
+			"sub_path": "process/Classic/0.10mm Fine @UltiMaker 2+.json"
+		},
+		{
+			"name": "0.15mm Standard @UltiMaker 2+",
+			"sub_path": "process/Classic/0.15mm Standard @UltiMaker 2+.json"
+		},
+		{
+			"name": "0.15mm Standard @UltiMaker 2+ 0.6 nozzle",
+			"sub_path": "process/Classic/0.15mm Standard @UltiMaker 2+ 0.6 nozzle.json"
+		},
+		{
+			"name": "0.2mm Fast @UltiMaker S5",
+			"sub_path": "process/SSERIES/0.2mm Fast @UltiMaker S5.json"
+		},
+		{
+			"name": "0.20mm Draft @UltiMaker 2+",
+			"sub_path": "process/Classic/0.20mm Draft @UltiMaker 2+.json"
+		},
+		{
+			"name": "0.10mm Fine @UltiMaker 2 extended+",
+			"sub_path": "process/Classic/0.10mm Fine @UltiMaker 2 extended+.json"
+		},
+		{
+			"name": "0.15mm Standard @UltiMaker 2 extended+",
+			"sub_path": "process/Classic/0.15mm Standard @UltiMaker 2 extended+.json"
+		},
+		{
+			"name": "0.15mm Standard @UltiMaker 2 extended+ 0.6 nozzle",
+			"sub_path": "process/Classic/0.15mm Standard @UltiMaker 2 extended+ 0.6 nozzle.json"
+		},
+		{
+			"name": "0.20mm Draft @UltiMaker 2 extended+",
+			"sub_path": "process/Classic/0.20mm Draft @UltiMaker 2 extended+.json"
 		}
 	],
 	"filament_list": [
