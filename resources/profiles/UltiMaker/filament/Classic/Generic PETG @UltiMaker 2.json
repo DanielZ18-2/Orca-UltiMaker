@@ -1,6 +1,7 @@
 {
 	"type": "filament",
 	"name": "Generic PETG @UltiMaker 2",
+	"renamed_from": "Generic PETG UltiMaker 2;Generic PETG @UltiMaker 2 0.4 nozzle;Generic PETG @UltiMaker 2 0.6 nozzle;Generic PETG @UltiMaker 2 0.8 nozzle",
 	"inherits": "fdm_filament_pet",
 	"from": "system",
 	"setting_id": "vXqoEG5mKvFjC7Hi",

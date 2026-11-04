@@ -1,7 +1,7 @@
 {
 	"type": "filament",
 	"name": "Generic ABS @UltiMaker 2 extended+",
-	"renamed_from": "Generic ABS @UltiMaker 2 Extended+",
+	"renamed_from": "Generic ABS @UltiMaker 2 Extended+;Generic ABS @UltiMaker 2 extended+ 0.4 nozzle;Generic ABS @UltiMaker 2 extended+ 0.6 nozzle;Generic ABS @UltiMaker 2 extended+ 0.8 nozzle",
 	"inherits": "fdm_filament_abs",
 	"from": "system",
 	"setting_id": "R8r1mfQFmj7eUm9Q",

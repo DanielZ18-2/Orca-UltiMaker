@@ -1,6 +1,7 @@
 {
 	"type": "filament",
 	"name": "Generic PLA @UltiMaker 2+",
+	"renamed_from": "Generic PLA UltiMaker 2+;Generic PLA @UltiMaker 2+ 0.4 nozzle;Generic PLA @UltiMaker 2+ 0.6 nozzle;Generic PLA @UltiMaker 2+ 0.8 nozzle",
 	"inherits": "fdm_filament_pla",
 	"from": "system",
 	"setting_id": "YfjK8Pp5NO9Rdy5d",
