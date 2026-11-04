@@ -11900,8 +11900,14 @@ std::vector<int> DynamicPrintConfig::update_values_to_printer_extruders(DynamicP
         variant_index[0] = get_index_for_extruder(extruder_id, id_name, extruder_type, nozzle_volume_type, variant_name);
 
         if (variant_index[0] < 0) {
-            BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(", Line %1%: could not found extruder_type %2%, nozzle_volume_type %3%, for filament")
+            // Orca: as in update_values_to_printer_extruders_for_multiple_filaments(), a filament
+            // need not define every extruder variant (a Direct Drive filament on a Bowden printer),
+            // so this is not an invalid state: the filament's first variant is used. Name that
+            // index here; the negative one only reached it through get_at() falling back to the
+            // first value, which for a stride above 1 would repeat that value in every slot.
+            BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(", Line %1%: could not found extruder_type %2%, nozzle_volume_type %3%, for filament")
                 % __LINE__ % s_keys_names_ExtruderType[extruder_type] % s_keys_names_NozzleVolumeType[nozzle_volume_type];
+            variant_index[0] = 0;
         }
 
         variant_count = 1;
