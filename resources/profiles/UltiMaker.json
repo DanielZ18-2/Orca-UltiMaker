@@ -3014,6 +3014,10 @@
 		{
 			"name": "UltiMaker S8 0.8 nozzle",
 			"sub_path": "machine/SSERIES/UltiMaker S8 0.8 nozzle.json"
+		},
+		{
+			"name": "UltiMaker S5 0.4 nozzle - Single Extruder",
+			"sub_path": "machine/SSERIES/UltiMaker S5 0.4 nozzle Single Extruder.json"
 		}
 	]
 }

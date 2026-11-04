@@ -8,7 +8,8 @@
 	"layer_height": "0.12",
 	"initial_layer_print_height": "0.12",
 	"compatible_printers": [
-		"UltiMaker S5 0.4 nozzle"
+		"UltiMaker S5 0.4 nozzle",
+		"UltiMaker S5 0.4 nozzle - Single Extruder"
 	],
 	"bottom_shell_layers": "3",
 	"bottom_shell_thickness": "0.60",

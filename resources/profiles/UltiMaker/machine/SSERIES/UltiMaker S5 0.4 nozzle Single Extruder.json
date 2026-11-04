@@ -1,0 +1,82 @@
+{
+	"type": "machine",
+	"name": "UltiMaker S5 0.4 nozzle - Single Extruder",
+	"inherits": "UltiMaker S5 0.4 nozzle",
+	"from": "system",
+	"setting_id": "7BKZlwffTrzDsUgj",
+	"instantiation": "true",
+	"printer_model": "UltiMaker S5",
+	"default_filament_profile": [
+		"Generic PLA @UltiMaker S5"
+	],
+	"nozzle_diameter": [
+		"0.4"
+	],
+	"nozzle_type": [
+		"brass"
+	],
+	"extruder_type": [
+		"Bowden"
+	],
+	"extruder_variant_list": [
+		"Bowden Standard"
+	],
+	"printer_extruder_variant": [
+		"Bowden Standard"
+	],
+	"printer_extruder_id": [
+		"1"
+	],
+	"z_offset": [
+		"0"
+	],
+	"min_layer_height": [
+		"0.08"
+	],
+	"max_layer_height": [
+		"0.32"
+	],
+	"retraction_length": [
+		"6.5"
+	],
+	"retract_length_toolchange": [
+		"16"
+	],
+	"deretraction_speed": [
+		"45"
+	],
+	"retract_restart_extra": [
+		"0"
+	],
+	"retraction_speed": [
+		"45"
+	],
+	"machine_max_acceleration_extruding": [
+		"2000",
+		"2000"
+	],
+	"machine_max_acceleration_retracting": [
+		"2000",
+		"2000"
+	],
+	"machine_max_acceleration_x": [
+		"9000",
+		"9000"
+	],
+	"machine_max_acceleration_y": [
+		"9000",
+		"9000"
+	],
+	"machine_max_speed_e": [
+		"45",
+		"45"
+	],
+	"machine_max_speed_x": [
+		"300",
+		"300"
+	],
+	"machine_max_speed_y": [
+		"300",
+		"300"
+	]
+}
