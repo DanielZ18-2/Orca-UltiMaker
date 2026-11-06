@@ -27,6 +27,9 @@
     "textured_plate_temp_initial_layer": [
         "45"
     ],
+    "filament_is_support": [
+        "0"
+    ],
     "filament_density": [
         "1.24"
     ],
