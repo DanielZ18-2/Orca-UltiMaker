@@ -7,6 +7,7 @@
 	"instantiation": "true",
 	"model_id": "UltiMaker Original+",
 	"gcode_flavor": "marlin",
+	"use_relative_e_distances": "0",
 	"printer_model": "UltiMaker Original+",
 	"printer_variant": "0.6",
 	"default_print_profile": "0.28mm Draft @UltiMaker Original+ 0.6 nozzle",
