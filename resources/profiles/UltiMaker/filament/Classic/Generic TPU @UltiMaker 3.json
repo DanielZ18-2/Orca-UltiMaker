@@ -48,16 +48,16 @@
 		"225"
 	],
 	"hot_plate_temp": [
-		"0"
+		"40"
 	],
 	"hot_plate_temp_initial_layer": [
-		"0"
+		"40"
 	],
 	"textured_plate_temp": [
-		"0"
+		"40"
 	],
 	"textured_plate_temp_initial_layer": [
-		"0"
+		"40"
 	],
 	"chamber_temperature": [
 		"27"
