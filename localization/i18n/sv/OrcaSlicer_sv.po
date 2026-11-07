@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 19:35+0000\n"
+"POT-Creation-Date: 2026-11-06 21:15+0000\n"
 "Language: sv\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -15057,6 +15057,9 @@ msgstr "Z-Hop"
 # AI Translated
 msgid "Power loss recovery requires a Bambu Lab printer or the Marlin firmware G-code flavor."
 msgstr "Återhämtning efter strömavbrott kräver en Bambu Lab-skrivare eller G-code-varianten Marlin 2."
+
+msgid "The .makerbot and .ufp files of this G-code flavor take their settings from the config block, so it is always written."
+msgstr ""
 
 # AI Translated
 msgid "Build plate tilt is derived from the belt tilt on belt printers."

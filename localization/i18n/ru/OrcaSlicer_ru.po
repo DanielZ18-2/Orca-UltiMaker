@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OrcaSlicer V2.5.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 19:35+0000\n"
+"POT-Creation-Date: 2026-11-06 21:15+0000\n"
 "PO-Revision-Date: 2026-02-25 13:38+0300\n"
 "Last-Translator: Felix14_v2\n"
 "Language-Team: Felix14_v2 (ДС/ТГ: @felix14_v2, почта: aleks111001@list.ru), Andylg <andylg@yandex.ru>\n"
@@ -13561,6 +13561,9 @@ msgstr "Подъём головы при откате"
 # AI Translated
 msgid "Power loss recovery requires a Bambu Lab printer or the Marlin firmware G-code flavor."
 msgstr "Для восстановления после потери питания требуется принтер Bambu Lab или тип G-code «Marlin 2»."
+
+msgid "The .makerbot and .ufp files of this G-code flavor take their settings from the config block, so it is always written."
+msgstr ""
 
 # AI Translated
 msgid "Build plate tilt is derived from the belt tilt on belt printers."

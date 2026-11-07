@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OrcaSlicer 2.3.0-rc\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 19:35+0000\n"
+"POT-Creation-Date: 2026-11-06 21:15+0000\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Krzysztof Morga <<tlumaczeniebs@gmail.com>>\n"
 "Language-Team: \n"
@@ -14230,6 +14230,9 @@ msgstr "Z-Hop"
 # Needs human review: The English names the 'Marlin firmware' G-code flavor; rendered as the dropdown option it means (Marlin 2).
 msgid "Power loss recovery requires a Bambu Lab printer or the Marlin firmware G-code flavor."
 msgstr "Odzyskiwanie po zaniku zasilania wymaga drukarki Bambu Lab lub rodzaju G-code „Marlin 2”."
+
+msgid "The .makerbot and .ufp files of this G-code flavor take their settings from the config block, so it is always written."
+msgstr ""
 
 # AI Translated
 msgid "Build plate tilt is derived from the belt tilt on belt printers."

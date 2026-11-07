@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 19:35+0000\n"
+"POT-Creation-Date: 2026-11-06 21:15+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -12490,6 +12490,9 @@ msgid "Z-Hop"
 msgstr ""
 
 msgid "Power loss recovery requires a Bambu Lab printer or the Marlin firmware G-code flavor."
+msgstr ""
+
+msgid "The .makerbot and .ufp files of this G-code flavor take their settings from the config block, so it is always written."
 msgstr ""
 
 msgid "Build plate tilt is derived from the belt tilt on belt printers."
