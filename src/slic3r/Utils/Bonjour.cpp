@@ -515,7 +515,11 @@ const uint16_t BonjourRequest::MCAST_PORT = 5353;
 
 optional<BonjourRequest> BonjourRequest::make_PTR(const std::string &service, const std::string &protocol)
 {
-	if (service.size() > 15 || protocol.size() > 15) {
+	// Each name goes into one DNS label behind an underscore, and a label
+	// holds at most 63 bytes. RFC 6335 keeps service names to 15
+	// characters, but not every device does: MakerBot's printers announce
+	// the service "makerbot-jsonrpc", 16 characters.
+	if (service.size() > 62 || protocol.size() > 62) {
 		return boost::none;
 	}
 
