@@ -6,8 +6,10 @@
 // Network discovery dialog for MakerBot and UltiMaker printers.
 //
 // Discovery strategy (in order):
-//   1. mDNS / DNS-SD browse for _makerbot._tcp and _ultimaker._tcp
+//   1. mDNS / DNS-SD queries for _makerbot-jsonrpc._tcp and _ultimaker._tcp
 //   2. UDP broadcast on port 12307 (MakerBot Birdwing legacy beacon)
+//   3. when neither found a MakerBot printer, a TCP connect to port 12309
+//      across the local and the most common home /24 networks
 //
 // The dialog shows a list of discovered printers with:
 //   Name | Model | IP Address | Protocol
@@ -40,20 +42,19 @@ public:
         std::string ip;
         std::string name;
         std::string model;
-        std::string protocol;    // "MakerBot Birdwing (SSL:12309)"
-                                 // "MakerBot Lava (HTTP:2222)"
-                                 // "UltiMaker (REST:80)"
+        std::string protocol;    // "MakerBot Birdwing (mDNS, SSL:12309)"
+                                 // "MakerBot Birdwing (UDP beacon, SSL:12309)"
+                                 // "MakerBot Birdwing (SSL:12309)" (scan)
+                                 // "UltiMaker S/Classic/Factor (REST:80)"
         int         port { 0 };
         bool        is_makerbot  { false };
         bool        is_ultimaker { false };
         bool        is_birdwing  { false };
-        bool        is_method    { false };
     };
 
     std::string selected_ip()       const { return m_selected_ip; }
     std::string selected_model()    const { return m_selected_model; }
     bool        selected_is_birdwing() const { return m_selected_birdwing; }
-    bool        selected_is_method()   const { return m_selected_method; }
 
 private:
     void start_discovery();
@@ -83,7 +84,6 @@ private:
     std::string m_selected_ip;
     std::string m_selected_model;
     bool        m_selected_birdwing { false };
-    bool        m_selected_method   { false };
 };
 
 } // namespace GUI

@@ -14,7 +14,6 @@
 #include <wx/busyinfo.h>
 
 #include <boost/log/trivial.hpp>
-#include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <nlohmann/json.hpp>
 
@@ -33,14 +32,21 @@
 #include <cstring>
 #include <thread>
 #include <chrono>
-#include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
 
 namespace Slic3r {
 namespace GUI {
 
 // -- mDNS Service Names --------------------------------------------------------
-static constexpr const char* MDNS_MAKERBOT  = "_makerbot._tcp.local.";
-static constexpr const char* MDNS_ULTIMAKER = "_ultimaker._tcp.local.";
+// Bonjour builds "_<service>._<protocol>.local" itself, so the names go in
+// without the leading underscore -- with it, the query asked for
+// "__makerbot._tcp.local" and nothing ever answered. Birdwing printers
+// announce "_makerbot-jsonrpc._tcp" (kaiten, firmware 2.6.3), UltiMaker
+// printers "_ultimaker._tcp" (what Cura's UM3NetworkPrinting looks for).
+static constexpr const char* MDNS_MAKERBOT  = "makerbot-jsonrpc";
+static constexpr const char* MDNS_ULTIMAKER = "ultimaker";
 static constexpr int         UDP_DISCOVERY_PORT = 12307;  // MakerBot Birdwing beacon
 static constexpr int         DISCOVERY_TIMEOUT_MS = 5000;
 
@@ -163,48 +169,74 @@ void MakerbotDiscoveryDialog::add_result(const DiscoveredPrinter& p)
     m_list->SetItem(idx, 3, from_u8(p.protocol));
 }
 
+// -- mDNS lookup --------------------------------------------------------------
+// Bonjour::lookup() runs on a thread of its own and detaches it, so its
+// callbacks can still arrive after the wait below has given up. They write
+// into state they share with this function, never into its locals. Replies
+// over IPv6 are left out: the host field takes the bare address, and a
+// printer that answers over both would be listed twice.
+static std::vector<BonjourReply> mdns_lookup(const char* service, Bonjour::TxtKeys txt_keys,
+                                             const std::atomic<bool>& stop)
+{
+    struct State
+    {
+        std::mutex                m;
+        std::condition_variable   cv;
+        std::vector<BonjourReply> replies;
+        bool                      done = false;
+    };
+    auto state = std::make_shared<State>();
+    const Bonjour::Ptr lookup = Bonjour(service)
+                                    .set_protocol("tcp")
+                                    .set_txt_keys(std::move(txt_keys))
+                                    .set_timeout(DISCOVERY_TIMEOUT_MS / 1000)
+                                    .set_retries(1)
+                                    .on_reply([state](BonjourReply&& reply) {
+                                        std::lock_guard<std::mutex> lock(state->m);
+                                        if (reply.ip.is_v4())
+                                            state->replies.push_back(std::move(reply));
+                                    })
+                                    .on_complete([state] {
+                                        {
+                                            std::lock_guard<std::mutex> lock(state->m);
+                                            state->done = true;
+                                        }
+                                        state->cv.notify_all();
+                                    })
+                                    .lookup();
+    const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(DISCOVERY_TIMEOUT_MS + 1000);
+    std::unique_lock<std::mutex> lock(state->m);
+    while (!state->done && !stop && std::chrono::steady_clock::now() < until)
+        state->cv.wait_for(lock, std::chrono::milliseconds(100));
+    return state->replies;
+}
+
+static std::string txt_value(const BonjourReply& reply, const std::string& key, const std::string& fallback)
+{
+    const auto it = reply.txt_data.find(key);
+    return it == reply.txt_data.end() || it->second.empty() ? fallback : it->second;
+}
+
 // -- mDNS Discovery: MakerBot --------------------------------------------------
 
 void MakerbotDiscoveryDialog::discover_mdns_makerbot(std::vector<DiscoveredPrinter>& out)
 {
     try {
-        std::vector<BonjourReply> replies;
-        bool mb_done = false;
-        Bonjour mb_bonjour("_makerbot");
-        mb_bonjour.set_protocol("tcp")
-            .set_timeout(DISCOVERY_TIMEOUT_MS / 1000)
-            .set_retries(1)
-            .on_reply([&replies](BonjourReply &&reply) {
-                replies.push_back(std::move(reply));
-            })
-            .on_complete([&mb_done]{ mb_done = true; });
-        auto mb_ptr = mb_bonjour.lookup();
-        for (int i = 0; i < DISCOVERY_TIMEOUT_MS/100 && !mb_done; ++i)
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        for (const auto& r : replies) {
+        for (const BonjourReply& r : mdns_lookup(MDNS_MAKERBOT, {"machine_type", "machine_name"}, m_stop)) {
             if (m_stop) break;
             DiscoveredPrinter p;
-            p.ip          = r.full_address;
-            p.name        = r.hostname.empty() ? "MakerBot" : r.hostname;
+            p.ip          = r.ip.to_string();
+            p.name        = txt_value(r, "machine_name", r.hostname.empty() ? "MakerBot" : r.hostname);
             p.is_makerbot = true;
-
-            // Detect generation from port
-            const int port = r.port > 0 ? r.port : 12309;
-            if (port == 12309 || port == 12309) {
-                p.is_birdwing = true;
-                p.port        = 12309;
-                p.protocol    = "MakerBot Birdwing (SSL:12309)";
-                p.model       = r.txt_data.count("machine_type")
-                    ? r.txt_data.at("machine_type") : "Birdwing";
-            } else {
-                p.port     = 2222;
-                p.protocol = "MakerBot Lava/Method (HTTP:2222)";
-                p.model    = r.txt_data.count("machine_type")
-                    ? r.txt_data.at("machine_type") : "Method";
-                p.is_method = (p.model.find("method") != std::string::npos ||
-                               p.model.find("Method") != std::string::npos);
-            }
+            // The service is kaiten's JSON-RPC. As for a printer the UDP
+            // beacon finds (discover_udp_broadcast()), only the bare address
+            // goes to the printer settings, and MakerbotLink connects to a
+            // bare address over SSL on port 12309, a Method as well as a
+            // Birdwing printer.
+            p.is_birdwing = true;
+            p.port        = 12309;
+            p.protocol    = "MakerBot Birdwing (mDNS, SSL:12309)";
+            p.model       = txt_value(r, "machine_type", "Birdwing");
 
             BOOST_LOG_TRIVIAL(info) << "MakerbotDiscovery: found " << p.name
                                     << " at " << p.ip << " (" << p.protocol << ")";
@@ -220,42 +252,20 @@ void MakerbotDiscoveryDialog::discover_mdns_makerbot(std::vector<DiscoveredPrint
 void MakerbotDiscoveryDialog::discover_mdns_ultimaker(std::vector<DiscoveredPrinter>& out)
 {
     try {
-        std::vector<BonjourReply> replies;
-        bool um_done = false;
-        Bonjour um_bonjour("_ultimaker");
-        um_bonjour.set_protocol("tcp")
-            .set_timeout(DISCOVERY_TIMEOUT_MS / 1000)
-            .set_retries(1)
-            .on_reply([&replies](BonjourReply &&reply) {
-                replies.push_back(std::move(reply));
-            })
-            .on_complete([&um_done]{ um_done = true; });
-        auto um_ptr = um_bonjour.lookup();
-        for (int i = 0; i < DISCOVERY_TIMEOUT_MS/100 && !um_done; ++i)
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        for (const auto& r : replies) {
+        for (const BonjourReply& r : mdns_lookup(MDNS_ULTIMAKER, {"name"}, m_stop)) {
             if (m_stop) break;
             DiscoveredPrinter p;
-            p.ip          = r.full_address;
-            p.name        = r.hostname.empty() ? "UltiMaker" : r.hostname;
+            p.ip           = r.ip.to_string();
+            p.name         = txt_value(r, "name", r.hostname.empty() ? "UltiMaker" : r.hostname);
             p.is_ultimaker = true;
-            p.port         = 80;
-
-            const std::string model = r.txt_data.count("machine_type")
-                ? r.txt_data.at("machine_type") : "";
-            p.model = model.empty() ? "UltiMaker" : model;
-
-            const std::string model_lc = boost::algorithm::to_lower_copy(model);
-            if (model_lc.find("method") != std::string::npos) {
-                p.is_method = true;
-                p.protocol  = "UltiMaker Method (REST:80)";
-            } else {
-                p.protocol = "UltiMaker S/Classic/Factor (REST:80)";
-            }
+            p.port         = r.port > 0 ? r.port : 80;
+            // The model stays generic: the only machine field in the TXT
+            // record, "machine", holds Cura's numeric machine id.
+            p.model        = "UltiMaker";
+            p.protocol     = "UltiMaker S/Classic/Factor (REST:" + std::to_string(p.port) + ")";
 
             BOOST_LOG_TRIVIAL(info) << "MakerbotDiscovery: found UltiMaker " << p.name
-                                    << " at " << p.ip;
+                                    << " at " << p.ip << " (mDNS)";
             out.push_back(p);
         }
     } catch (const std::exception& e) {
@@ -348,8 +358,8 @@ void MakerbotDiscoveryDialog::EndModal_if_selected()
 
 
 // -- Subnet Scan: TCP-Connect auf Port 12309 -----------------------------------
-// Birdwing printers do not support mDNS and do not respond to UDP broadcasts
-// across subnet boundaries. Therefore: parallel TCP scan of all hosts in the /24 subnet.
+// Neither mDNS nor the UDP broadcast crosses subnet boundaries.
+// Therefore: parallel TCP scan of all hosts in the /24 subnet.
 void MakerbotDiscoveryDialog::discover_subnet_scan(std::vector<DiscoveredPrinter>& out)
 {
     // Bekannte private Heimnetz-Subnetz-Prefixes
@@ -485,7 +495,6 @@ void MakerbotDiscoveryDialog::on_ok(wxCommandEvent&)
     m_selected_ip       = m_results[sel].ip;
     m_selected_model    = m_results[sel].model;
     m_selected_birdwing = m_results[sel].is_birdwing;
-    m_selected_method   = m_results[sel].is_method;
     stop_discovery();
     EndModal(wxID_OK);
 }
