@@ -809,6 +809,29 @@ TEST_CASE("gcode_skip_config_block omits the resolved-settings comment block", "
     CHECK(gcode.find("; EXECUTABLE_BLOCK_START") != std::string::npos);
 }
 
+// The .makerbot and .ufp exports read their values from the config block, so
+// these flavors keep it even when gcode_skip_config_block asks to leave it out.
+TEST_CASE("Skipping the config block leaves it in for the flavors whose export reads it", "[Print]")
+{
+    const auto [flavor, keeps_block] = GENERATE(table<std::string, bool>({
+        { "makerbot_birdwing", true },
+        { "makerbot_lava",     true },
+        { "griffin",           true },
+        { "cheetah",           true },
+        { "ultigcode",         false },
+        { "makerbot_legacy",   false },
+        { "marlin2",           false },
+    }));
+    DYNAMIC_SECTION("gcode_flavor " << flavor) {
+        const std::string gcode = slice({ cube(20) }, {
+            { "gcode_flavor",            flavor },
+            { "gcode_skip_config_block", true },
+        });
+        const bool has_block = gcode.find("; CONFIG_BLOCK_START") != std::string::npos;
+        CHECK(has_block == keeps_block);
+    }
+}
+
 // Some firmwares only scan the last N lines of the file for "estimated printing time", so it
 // must stay close to EOF regardless of the resolved-settings config block's size.
 TEST_CASE("The estimated printing time comment stays near the end of the file", "[Print]")
