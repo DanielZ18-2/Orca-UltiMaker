@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include "libslic3r/libslic3r.h"
 #include "libslic3r/Exception.hpp"
+#include "libslic3r/miniz_extension.hpp"
 #include "libslic3r/PrintConfig.hpp"
 #include <initializer_list>
 #include "libslic3r/Point.hpp"
@@ -499,6 +500,32 @@ std::vector<std::string> role_sequence(const std::string &gcode, const std::vect
             }
     });
     return seq;
+}
+
+std::map<std::string, std::string> zip_entries(const std::string &path)
+{
+    std::map<std::string, std::string> entries;
+    mz_zip_archive zip;
+    mz_zip_zero_struct(&zip);
+    if (! open_zip_reader(&zip, path))
+        return entries;
+    const mz_uint count = mz_zip_reader_get_num_files(&zip);
+    for (mz_uint i = 0; i < count; ++i) {
+        mz_zip_archive_file_stat stat;
+        if (! mz_zip_reader_file_stat(&zip, i, &stat) || stat.m_is_directory)
+            continue;
+        std::string data(size_t(stat.m_uncomp_size), '\0');
+        if (stat.m_uncomp_size > 0 && ! mz_zip_reader_extract_to_mem(&zip, i, data.data(), data.size(), 0))
+            continue;
+        entries.emplace(stat.m_filename, std::move(data));
+    }
+    close_zip_reader(&zip);
+    return entries;
+}
+
+size_t common_prefix_length(const std::string &a, const std::string &b)
+{
+    return size_t(std::mismatch(a.begin(), a.end(), b.begin(), b.end()).first - a.begin());
 }
 
 } } // namespace Slic3r::Test

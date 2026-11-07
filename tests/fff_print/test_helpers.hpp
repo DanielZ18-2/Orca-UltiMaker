@@ -12,6 +12,7 @@
 #include <cstddef>
 #include "libslic3r/PrintConfig.hpp"
 #include <initializer_list>
+#include <map>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -135,6 +136,13 @@ int role_passes(const std::string &gcode, const std::string &role);
 
 // The `roles` in the order their extrusion blocks first appear, consecutive repeats collapsed.
 std::vector<std::string> role_sequence(const std::string &gcode, const std::vector<std::string> &roles);
+
+// The files in a zip archive (.makerbot, .ufp) by name. Empty when `path` is not a readable archive.
+std::map<std::string, std::string> zip_entries(const std::string &path);
+
+// How many characters `a` and `b` share from their start: all of them when they are the same. Compare
+// long outputs with it, so that a failure names where they first differ instead of printing both.
+size_t common_prefix_length(const std::string &a, const std::string &b);
 
 } } // namespace Slic3r::Test
 
