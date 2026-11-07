@@ -6837,6 +6837,13 @@ void TabPrinter::toggle_options()
         toggle_line("enable_power_loss_recovery", is_BBL_printer || gcf_is_marlin_firmware, -1,
             _L("Power loss recovery requires a Bambu Lab printer or the Marlin firmware G-code flavor."));
 
+        // MakerBot / UltiMaker Fork: the files of these flavors take their
+        // settings from the config block, so it is always written for them.
+        // See flavor_reads_config_block().
+        toggle_option("gcode_skip_config_block",
+            !flavor_reads_config_block(m_config->option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor")->value), -1,
+            _L("The .makerbot and .ufp files of this G-code flavor take their settings from the config block, so it is always written."));
+
         // Belt printer: show belt-specific settings only when belt_printer is enabled.
         bool is_belt = m_config->opt_bool("belt_printer");
         const wxString belt_plate_tilt_reason = _L("Build plate tilt is derived from the belt tilt on belt printers.");

@@ -3444,7 +3444,13 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
     DoExport::init_gcode_processor(print.config(), m_processor, print.get_layered_nozzle_group_result());
     set_mass_locator(m_processor, print);
     const bool is_bbl_printers = print.is_BBL_printer();
-    const bool skip_config_block = print.config().gcode_skip_config_block;
+    // MakerBot / UltiMaker Fork: the .makerbot and .ufp exports read their
+    // values from the config block, see flavor_reads_config_block().
+    const bool skip_config_block = print.config().gcode_skip_config_block &&
+                                   !flavor_reads_config_block(print.config().gcode_flavor);
+    if (print.config().gcode_skip_config_block && !skip_config_block)
+        BOOST_LOG_TRIVIAL(warning) << "gcode_skip_config_block ignored: the export of this G-code flavor "
+                                      "reads its values from the config block";
     const WipeTowerType wipe_tower_type = print.wipe_tower_type();
     m_calib_config.clear();
     // Orca: Calibration overrides are reapplied after object/region settings in _extrude().

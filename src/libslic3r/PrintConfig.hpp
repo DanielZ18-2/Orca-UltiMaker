@@ -128,6 +128,25 @@ inline bool flavor_keeps_own_motion_limits(GCodeFlavor flavor)
            flavor == gcfCheetah        || flavor == gcfUltiGCode;
 }
 
+// MakerBot / UltiMaker Fork: does the export of this flavor read its values
+// back from the G-code? The .makerbot archive (Birdwing, Lava) takes
+// temperatures, plate temperature, layer height, speeds and the like from
+// the "; key = value" lines of the config block (MakerBotExport.cpp
+// parse_header()), the .ufp archive (Griffin, Cheetah) the layer height
+// and first layer bed temperature of its header and the filament diameter
+// and density for the material weight (UltimakerUFPExport.cpp
+// parse_griffin_source_data()). Without the block they fall back to their
+// defaults without a word. So for these flavors GCode::_do_export() writes
+// the block even with gcode_skip_config_block on, and the printer tab greys
+// the setting out. The x3g conversion (Legacy, GPXExport.cpp) and the head
+// of the UltiGCode flavor take their values from the configuration and
+// from the print statistics, which are written either way.
+inline bool flavor_reads_config_block(GCodeFlavor flavor)
+{
+    return flavor == gcfMakerBotBirdwing || flavor == gcfMakerBotLava ||
+           flavor == gcfGriffin          || flavor == gcfCheetah;
+}
+
 // How a filament is used across the model. Part of the multi-nozzle grouping data; not yet
 // read by the shipping slicer — the nozzle-centric FilamentGroup engine consumes it.
 enum FilamentUsageType {
