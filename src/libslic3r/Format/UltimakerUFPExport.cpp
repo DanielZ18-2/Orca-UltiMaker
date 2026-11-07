@@ -54,6 +54,11 @@ struct GriffinSourceData
     // received 0.0.
     std::vector<double> first_layer_temps;   // fallback, see build_griffin_header
     std::vector<double> volume_used_mm3;     // from "filament used [cm3]", x1000
+    // "; first_layer_bed_temperature = N" from the config block: the first
+    // layer bed temperature GCode::_do_export() chose for the plate: the
+    // highest or that of the first extruder to print, as
+    // bed_temperature_formula says. -1: not in the file.
+    int first_layer_bed_temp = -1;
 };
 
 // Splits "245,240" or "9.36, 9.10" into a list. Orca writes multi-value
@@ -138,6 +143,8 @@ static GriffinSourceData parse_griffin_source_data(const std::string& gcode_path
             }
         }
         else if (key == "layer_height")        d.layer_height       = parse_double_safe(val, d.layer_height);
+        else if (key == "first_layer_bed_temperature")
+                                                d.first_layer_bed_temp = parse_int_safe(val, d.first_layer_bed_temp);
         else if (key == "filament_diameter")   d.filament_diameter  = parse_double_safe(val, d.filament_diameter);
         else if (key == "filament_density")    d.filament_density   = parse_double_safe(val, d.filament_density);
         else if (key == "total layer number")  d.num_layers         = parse_int_safe(val, d.num_layers);
@@ -201,14 +208,24 @@ static std::string build_griffin_header(
         if (const auto* s = dynamic_cast<const ConfigOptionString*>(opt))
             if (!s->value.empty()) machine = s->value;
 
+    // The first layer bed temperature of the current plate. PrintConfig has
+    // no option "first_layer_bed_temperature" or "bed_temperature" -- both
+    // exist only as G-code placeholders (TemperaturesConfigDef) -- so asking
+    // for them gave 0 in every .ufp. The value in the config block is the one
+    // the G-code itself heats the plate to. Without it, the plate's first
+    // layer temperature from the configuration: the highest of the
+    // filaments with bed_temperature_formula "highest", otherwise the first
+    // filament's -- close to the G-code's choice, which looks only at the
+    // filaments of the first layer.
     int bed_temp = 0; // 0 is valid per isAPositiveNumber() (>= 0)
-    if (const auto* opt = config.option("first_layer_bed_temperature"))
+    if (d.first_layer_bed_temp >= 0)
+        bed_temp = d.first_layer_bed_temp;
+    else if (const auto* opt = config.option(get_bed_temp_1st_layer_key(config.curr_bed_type.value)))
         if (const auto* v = dynamic_cast<const ConfigOptionInts*>(opt))
-            if (!v->values.empty() && v->values[0] > 0) bed_temp = v->values[0];
-    if (bed_temp <= 0)
-        if (const auto* opt = config.option("bed_temperature"))
-            if (const auto* v = dynamic_cast<const ConfigOptionInts*>(opt))
-                if (!v->values.empty()) bed_temp = v->values[0];
+            if (!v->values.empty())
+                bed_temp = config.bed_temperature_formula.value == BedTempFormula::btfHighestTemp ?
+                               *std::max_element(v->values.begin(), v->values.end()) :
+                               v->values.front();
 
     // Nozzle diameter per extruder for EXTRUDER_TRAIN.<n>.NOZZLE.DIAMETER.
     std::vector<double> nozzle_d = { 0.4 };
@@ -241,10 +258,11 @@ static std::string build_griffin_header(
     hdr << ";PRINT.SIZE.MAX.Z:" << bbox.max_z << "\n";
     hdr << ";BUILD_PLATE.INITIAL_TEMPERATURE:" << bed_temp << "\n";
     // Initial temperature per extruder, straight from the configuration.
-    // The G-code settings block is NOT a reliable source here: the UFP
-    // packer reads the file before Orca appends CONFIG_BLOCK_START, so
-    // nozzle_temperature_initial_layer never arrives. Everything this
-    // header gets right comes from before that marker.
+    // The config block is no reliable source for these: near its end it
+    // has the compatibility line "; first_layer_temperature = N"
+    // (GCode.cpp), one value for the first extruder to print, and
+    // parse_griffin_source_data() lets it replace the list per extruder
+    // read from nozzle_temperature_initial_layer before it.
     std::vector<int> cfg_first_temps;
     if (const auto* opt = config.option("nozzle_temperature_initial_layer"))
         if (const auto* v = dynamic_cast<const ConfigOptionInts*>(opt))
