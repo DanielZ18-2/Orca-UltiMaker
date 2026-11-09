@@ -1564,7 +1564,7 @@ std::string pack_to_archive(const std::string& gcode_path, const PrintConfig& co
         try { fs::remove(gcode_source); } catch (...) {}
     }
 
-    BOOST_LOG_TRIVIAL(info) << "MakerBotExport: archive at " << archive_path;
+    BOOST_LOG_TRIVIAL(info) << "MakerBotExport: .makerbot archive created: " << archive_path;
     return archive_path;
 }
 
