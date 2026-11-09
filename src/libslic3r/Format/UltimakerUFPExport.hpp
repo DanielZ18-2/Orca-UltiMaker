@@ -7,8 +7,9 @@
 // Format Package) archive required by genuine UltiMaker S-Line printers
 // (S3/S5/2+ Connect etc.) and by Cura Connect / the UltiMaker Digital
 // Factory to correctly read back print time, material usage and a preview
-// thumbnail. Called from GCode::do_export() after the .tmp -> .gcode rename
-// succeeds.
+// thumbnail. Called once the G-code file is at its final path: by the
+// G-code export (BackgroundSlicingProcess::finalize_gcode() and
+// export_gcode()) and before an upload (Plater::send_gcode_legacy()).
 //
 // This module is UltiMaker-only and has no dependency on, or knowledge of,
 // MakerBot/.makerbot export - that lives entirely independently in
@@ -46,7 +47,7 @@ namespace UltimakerUFPExport {
 // Returns the canonical output extension (with leading dot) for the given flavor.
 std::string get_archive_extension(GCodeFlavor flavor);
 
-// Main entry point - called from GCode::do_export() after the G-code is written.
+// Main entry point - called once the G-code file is written, see above.
 //
 // gcode_path : path of the freshly written .gcode file
 // config     : full print config (used for printer model, temperatures, etc.)

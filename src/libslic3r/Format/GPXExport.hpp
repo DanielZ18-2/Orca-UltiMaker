@@ -5,8 +5,9 @@
 // =============================================================================
 // Post-processes a finished G-code file into the native .x3g archive required
 // by the entire pre-Birdwing MakerBot/Sailfish lineage - Cupcake through
-// Replicator 2X (gcfMakerBotLegacy). Called from GCode::do_export() after the
-// .tmp -> .gcode rename succeeds.
+// Replicator 2X (gcfMakerBotLegacy). Called by the G-code export
+// (BackgroundSlicingProcess::finalize_gcode() and export_gcode()) once the
+// G-code file is at its final path.
 //
 // This module is independent of MakerBotExport.* (Birdwing/Lava) and
 // UltimakerUFPExport.* - removing either of those from a build does not

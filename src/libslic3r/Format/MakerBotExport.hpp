@@ -4,8 +4,10 @@
 // MakerBot / UltiMaker Fork - Orca Slicer 2.4
 // =============================================================================
 // Post-processes a finished G-code file into the native .makerbot archive
-// format required by MakerBot (Birdwing/Lava) printers. Called from
-// GCode::do_export() after the .tmp -> .gcode rename succeeds.
+// format required by MakerBot (Birdwing/Lava) printers. Called once the
+// G-code file is at its final path: by the G-code export
+// (BackgroundSlicingProcess::finalize_gcode() and export_gcode()) and
+// before an upload (Plater::send_gcode_legacy()).
 //
 // This module is MakerBot-only and has no dependency on, or knowledge of,
 // UltiMaker/.ufp export - that lives entirely independently in
@@ -42,7 +44,7 @@ struct BirdwingThumbnails {
 
 std::string get_archive_extension(GCodeFlavor flavor);
 
-// Main entry point - called from GCode::do_export() after the G-code is written.
+// Main entry point - called once the G-code file is written, see above.
 //
 // gcode_path  : path of the freshly written .gcode file
 // config      : full print config (used for nozzle temps, flavor, etc.)
