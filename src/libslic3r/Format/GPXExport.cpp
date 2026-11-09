@@ -8,7 +8,9 @@
 #include "MakerBotCoords.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 #include <boost/algorithm/string.hpp>
@@ -62,6 +64,21 @@ int extruder_count(const PrintConfig& config)
 bool contains(const std::string& haystack, const char* needle)
 {
     return haystack.find(needle) != std::string::npos;
+}
+
+// The needle as a word of its own, for short names that hide inside other
+// words: "tom" in "MakerBot TOM", but not in "custom".
+bool contains_word(const std::string& haystack, const char* needle)
+{
+    const size_t length = std::strlen(needle);
+    for (size_t pos = haystack.find(needle); pos != std::string::npos; pos = haystack.find(needle, pos + 1)) {
+        const bool starts = pos == 0 || !std::isalnum(static_cast<unsigned char>(haystack[pos - 1]));
+        const bool ends   = pos + length == haystack.size() ||
+                            !std::isalnum(static_cast<unsigned char>(haystack[pos + length]));
+        if (starts && ends)
+            return true;
+    }
+    return false;
 }
 
 } // namespace
@@ -120,7 +137,7 @@ std::string GPXExport::gpx_machine_for_config(const PrintConfig& config)
     }
 
     // Thing-O-Matic
-    if (contains(model, "thing-o-matic") || contains(model, "thing o matic") || contains(model, "tom")) {
+    if (contains(model, "thing-o-matic") || contains(model, "thing o matic") || contains_word(model, "tom")) {
         if (extruders >= 2)
             return "t7d";
         if (contains(model, "mk6"))

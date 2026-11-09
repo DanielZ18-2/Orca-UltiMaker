@@ -160,6 +160,7 @@ TEST_CASE("An .x3g file converted in a locale with a decimal comma is the same",
 // a user's own, gets it from the model name and the number of extruders: the
 // models of the profiles land on the machine their profile names, and a
 // second extruder makes a Replicator or a Thing-O-Matic the dual machine.
+// "TOM" counts as a word of its own: a "Custom Cupcake" stays a Cupcake.
 TEST_CASE("A legacy MakerBot without a GPX machine gets the one of its model and extruders", "[GPXExport]")
 {
     const auto [model, extruders, machine] = GENERATE(table<std::string, int, std::string>({
@@ -172,6 +173,8 @@ TEST_CASE("A legacy MakerBot without a GPX machine gets the one of its model and
         {"MakerBot Cupcake CNC", 1, "c3"},
         {"MakerBot Replicator Original", 2, "r1d"},
         {"MakerBot Thing-O-Matic ABP", 2, "t7d"},
+        {"MakerBot TOM", 1, "t7"},
+        {"Custom Cupcake", 1, "c3"},
     }));
     DYNAMIC_SECTION("printer_model " << model << ", " << extruders << " extruder(s)") {
         PrintConfig config;
