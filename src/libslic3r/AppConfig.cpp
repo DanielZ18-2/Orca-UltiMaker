@@ -749,6 +749,20 @@ void AppConfig::set_defaults()
         set_bool("enable_ota", false);
     }
 
+    // MakerBot / UltiMaker Fork: the UltiMaker 2 Extended+ took upstream's
+    // name, "UltiMaker 2 extended+". The models chosen in the wizard are kept
+    // by name, and a model knows no renamed_from: without this the printer
+    // would vanish from the list after the update, until chosen again.
+    if (auto it_vendor = m_vendors.find("UltiMaker"); it_vendor != m_vendors.end()) {
+        auto &models = it_vendor->second;
+        if (auto it_old = models.find("UltiMaker 2 Extended+"); it_old != models.end()) {
+            const std::set<std::string> variants = it_old->second;
+            models.erase(it_old);
+            models["UltiMaker 2 extended+"].insert(variants.begin(), variants.end());
+            m_dirty = true;
+        }
+    }
+
     // Remove legacy window positions/sizes
     erase("app", "main_frame_maximized");
     erase("app", "main_frame_pos");

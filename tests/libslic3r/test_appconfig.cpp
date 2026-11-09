@@ -26,6 +26,23 @@ TEST_CASE("Full collision-volume previews are opt-in and retain the user's prefe
     CHECK(config.get_bool("show_collision_volumes"));
 }
 
+// MakerBot / UltiMaker Fork: the UltiMaker 2 Extended+ took upstream's name,
+// "UltiMaker 2 extended+". The models chosen in the wizard are kept by name;
+// the old name moves to the new one with its nozzles.
+TEST_CASE("The UltiMaker 2 Extended+ chosen before its rename stays chosen", "[AppConfig]")
+{
+    AppConfig config;
+    config.set_variant("UltiMaker", "UltiMaker 2 Extended+", "0.4", true);
+    config.set_variant("UltiMaker", "UltiMaker 2 Extended+", "0.6", true);
+    config.set_variant("UltiMaker", "UltiMaker S5", "0.4", true);
+    config.set_defaults();
+
+    CHECK(config.get_variant("UltiMaker", "UltiMaker 2 extended+", "0.4"));
+    CHECK(config.get_variant("UltiMaker", "UltiMaker 2 extended+", "0.6"));
+    CHECK(config.vendors().at("UltiMaker").count("UltiMaker 2 Extended+") == 0);
+    CHECK(config.get_variant("UltiMaker", "UltiMaker S5", "0.4"));
+}
+
 TEST_CASE("AppConfig network version helpers", "[AppConfig]") {
     AppConfig config;
 
