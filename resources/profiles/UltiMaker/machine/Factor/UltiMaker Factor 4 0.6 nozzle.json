@@ -26,6 +26,14 @@
 		"Direct Drive",
 		"Direct Drive"
 	],
+	"extruder_variant_list": [
+		"Direct Drive Standard",
+		"Direct Drive Standard"
+	],
+	"printer_extruder_variant": [
+		"Direct Drive Standard",
+		"Direct Drive Standard"
+	],
 	"printer_extruder_id": [
 		"1",
 		"2"
