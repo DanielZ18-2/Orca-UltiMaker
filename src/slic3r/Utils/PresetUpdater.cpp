@@ -305,7 +305,8 @@ void PresetUpdater::priv::set_download_prefs(AppConfig *app_config)
 	auto profile_update_url = app_config->profile_update_url();
 	// Dev builds keep the profiles from their own source tree; an over-the-air bundle would replace them.
 	const bool dev_build = boost::algorithm::icontains(std::string(SoftFever_VERSION), "dev");
-	if (!profile_update_url.empty() && !dev_build)
+	// MakerBot / UltiMaker Fork: and only with enable_ota set, see AppConfig::set_defaults().
+	if (!profile_update_url.empty() && !dev_build && app_config->get_bool("enable_ota"))
 		enabled_config_update = true;
 	else
 		enabled_config_update = false;

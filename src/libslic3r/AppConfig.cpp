@@ -740,6 +740,15 @@ void AppConfig::set_defaults()
         set_bool("use_printer_agents", false);
     }
 
+    // MakerBot / UltiMaker Fork: vendor profile updates over the air stay
+    // off unless enable_ota is set, as before v2.5.0. The fork's profiles
+    // ship with its releases, and PROFILE_UPDATE_URL points at the fork's
+    // release list, which holds no profile bundles.
+    if (get("enable_ota").empty())
+    {
+        set_bool("enable_ota", false);
+    }
+
     // Remove legacy window positions/sizes
     erase("app", "main_frame_maximized");
     erase("app", "main_frame_pos");
