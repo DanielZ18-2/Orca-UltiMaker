@@ -4,6 +4,7 @@
 #include <boost/filesystem/operations.hpp>
 #include <boost/nowide/fstream.hpp>
 
+#include "libslic3r/Config.hpp"
 #include "libslic3r/Format/GPXExport.hpp"
 #include "libslic3r/LocalesUtils.hpp"
 #include "libslic3r/Model.hpp"
@@ -14,6 +15,7 @@
 #include "test_utils.hpp"
 
 #include <iterator>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -74,6 +76,23 @@ std::string read_file(const std::string &path)
 std::string set_tool0_temperature(unsigned int celsius)
 {
     return std::string{char(136), char(0), char(3), char(2), char(celsius & 0xff), char(celsius >> 8)};
+}
+
+// How often the bytes of an x3g command occur in a file.
+size_t count_of(const std::string &bytes, const std::string &command)
+{
+    size_t count = 0;
+    for (size_t pos = bytes.find(command); pos != std::string::npos; pos = bytes.find(command, pos + 1))
+        ++count;
+    return count;
+}
+
+// The x3g command that runs (1) or stops (0) the belt of the Automated Build
+// Platform: tool action 136, tool 0, action 27 with one payload byte. GPX
+// writes it for M106 and M107 on the Cupcake and the Thing-O-Matic.
+std::string abp_belt(bool on)
+{
+    return std::string{char(136), char(0), char(27), char(1), char(on ? 1 : 0)};
 }
 
 } // namespace
@@ -209,4 +228,105 @@ TEST_CASE("An unknown GPX machine falls back to the one of the model", "[GPXExpo
         {"gpx_machine_type", "r3"},
     });
     CHECK(GPXExport::gpx_machine_for_config(config) == "r2x");
+}
+
+// The Thing-O-Matic's Automated Build Platform is a belt over the heated
+// platform that carries a finished part off it. The end G-code of the shipped
+// ABP preset cools the platform to 5 C below the print temperature, runs the
+// belt for 14 s and stops it. Nothing else in the print touches the belt: the
+// part fan of the legacy flavor is M126/M127, which GPX leaves out for these
+// machines.
+TEST_CASE("A Thing-O-Matic ABP print ends by running the belt once", "[GPXExport]")
+{
+    const std::string preset = std::string(PROFILES_DIR) +
+                               "/MakerBot/machine/Legacy/MakerBot Thing-O-Matic ABP 0.4 nozzle.json";
+    if (!boost::filesystem::exists(preset))
+        SKIP("shipped profile not present in this checkout: " << preset);
+    DynamicPrintConfig                 shipped;
+    ConfigSubstitutionContext          substitutions{ForwardCompatibilitySubstitutionRule::Enable};
+    std::map<std::string, std::string> key_values;
+    std::string                        reason;
+    shipped.load_from_json(preset, substitutions, false, key_values, reason);
+    INFO("profile: " << preset << (reason.empty() ? "" : ("  load reason: " + reason)));
+    REQUIRE(shipped.has("machine_end_gcode"));
+    REQUIRE(shipped.has("machine_start_gcode"));
+
+    DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
+    config.set_deserialize_strict({
+        {"gcode_flavor", "makerbot_legacy"},
+        {"printer_model", "MakerBot Thing-O-Matic ABP"},
+        {"gpx_machine_type", "t7"},
+        {"printable_area", "0x0,106x0,106x120,0x120"},
+        {"printable_height", 106},
+        {"nozzle_diameter", "0.4"},
+        {"layer_height", 0.4},
+        {"initial_layer_print_height", 0.4},
+        {"nozzle_temperature_initial_layer", "230"},
+        {"nozzle_temperature", "230"},
+        {"curr_bed_type", "High Temp Plate"},
+        {"hot_plate_temp_initial_layer", "100"},
+        {"hot_plate_temp", "100"},
+    });
+    // Fans the Thing-O-Matic has not: with an auxiliary fan Orca writes
+    // M106 P2 at the start, during the print and before the end G-code, with
+    // air filtration M106 P3 after it. GPX would start the belt with each of
+    // them, so the export comments them out.
+    static constexpr int no_extra_fan = 0, auxiliary = 1, exhaust = 2;
+    const int            fans = GENERATE(no_extra_fan, auxiliary, exhaust);
+    CAPTURE(fans);
+    config.set_deserialize_strict({
+        {"auxiliary_fan", fans == auxiliary ? "1" : "0"},
+        {"additional_cooling_fan_speed", "70"},
+        {"support_air_filtration", fans == exhaust ? "1" : "0"},
+        {"activate_air_filtration", fans == exhaust ? "1" : "0"},
+        {"activate_air_filtration_on_completion", fans == exhaust ? "1" : "0"},
+        {"complete_print_exhaust_fan_speed", "70"},
+    });
+    config.set_key_value("machine_start_gcode", new ConfigOptionString(shipped.opt_string("machine_start_gcode")));
+    config.set_key_value("machine_end_gcode", new ConfigOptionString(shipped.opt_string("machine_end_gcode")));
+
+    ScopedEnvVar no_ini("ORCA_GPX_INI", "");
+    ScopedEnvVar no_kept_gcode("ORCA_GPX_KEEP_GCODE", "");
+    ScopedTemporaryDir dir;
+    const std::string  gcode_path = (dir.path() / "cube.gcode").string();
+    TriangleMesh       cube       = Test::cube(20);
+    cube.translate(43, 50, 0);
+    Print print;
+    Model model;
+    Test::init_print(std::vector<TriangleMesh>{cube}, print, model, config, nullptr, /*arrange=*/false);
+    print.process();
+    print.export_gcode(gcode_path, nullptr, nullptr);
+    // The G-code carries the fan commands, or the case checks nothing.
+    const std::string gcode = read_file(gcode_path);
+    if (fans == auxiliary)
+        REQUIRE(gcode.find("M106 P2") != std::string::npos);
+    if (fans == exhaust)
+        REQUIRE(gcode.find("M106 P3") != std::string::npos);
+    const std::string x3g = GPXExport::pack_to_archive(gcode_path, print.config());
+    REQUIRE_FALSE(x3g.empty());
+    const std::string bytes = read_file(x3g);
+
+    CHECK(count_of(bytes, abp_belt(true)) == 1);
+    CHECK(count_of(bytes, abp_belt(false)) == 1);
+    const size_t on  = bytes.find(abp_belt(true));
+    const size_t off = bytes.find(abp_belt(false));
+    REQUIRE(on != std::string::npos);
+    REQUIRE(off != std::string::npos);
+    // The platform target drops to 95 C before the belt runs: tool action 136,
+    // tool 0, action 31 with the temperature in two bytes.
+    const std::string platform_95{char(136), char(0), char(31), char(2), char(95), char(0)};
+    const size_t      cooled = bytes.find(platform_95);
+    REQUIRE(cooled != std::string::npos);
+    CHECK(cooled < on);
+    // Then the bot waits for the platform: command 141, tool 0, a query
+    // every 100 ms and the longest timeout GPX writes (0xffff s).
+    const std::string wait_platform{char(141), char(0), char(100), char(0), char(0xff), char(0xff)};
+    const size_t      waits = bytes.find(wait_platform, cooled);
+    REQUIRE(waits != std::string::npos);
+    CHECK(waits < on);
+    // Between the two the bot waits 14000 ms: command 133 with four bytes.
+    const std::string wait_14s{char(133), char(0xb0), char(0x36), char(0), char(0)};
+    const size_t      waited = bytes.find(wait_14s, on);
+    REQUIRE(waited != std::string::npos);
+    CHECK(waited < off);
 }

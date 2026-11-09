@@ -16,6 +16,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/log/trivial.hpp>
+#include <boost/nowide/fstream.hpp>
 
 namespace fs = boost::filesystem;
 
@@ -79,6 +80,67 @@ bool contains_word(const std::string& haystack, const char* needle)
             return true;
     }
     return false;
+}
+
+// GPX answers every M106/M107 with the ABP belt on the Cupcake and the
+// Thing-O-Matic (gpx.c, machines before the Replicator 1) and with the part
+// fan valve on the Replicators, whatever its P index. Orca writes M106 P2 and
+// P3 for an auxiliary and an exhaust fan, which none of these machines has:
+// true for an M106/M107 line that names a fan index of 1 or more. Reads the
+// line as GPX does (an optional line number, either case, parameters with or
+// without a space), not every spelling GPX would take.
+bool names_other_fan(const std::string& line)
+{
+    size_t i = line.find_first_not_of(" \t");
+    if (i == std::string::npos)
+        return false;
+    if (line[i] == 'N' || line[i] == 'n') {  // line number
+        size_t j = i + 1;
+        while (j < line.size() && std::isdigit(static_cast<unsigned char>(line[j])))
+            ++j;
+        if (j == i + 1)
+            return false;
+        i = line.find_first_not_of(" \t", j);
+        if (i == std::string::npos)
+            return false;
+    }
+    if (line.size() < i + 4 || (line[i] != 'M' && line[i] != 'm') ||
+        (line.compare(i + 1, 3, "106") != 0 && line.compare(i + 1, 3, "107") != 0))
+        return false;
+    i += 4;
+    if (i < line.size() && (std::isdigit(static_cast<unsigned char>(line[i])) || line[i] == '.'))
+        return false; // M1060, M106.1
+    const size_t end = std::min(line.find(';', i), line.size());
+    for (; i < end; ++i)
+        if ((line[i] == 'P' || line[i] == 'p') && std::strtol(line.c_str() + i + 1, nullptr, 10) >= 1)
+            return true;
+    return false;
+}
+
+// Copies the G-code from src to dst with the lines names_other_fan() picks
+// commented out, so GPX skips them and still reports Orca's line numbers.
+// Returns how many lines it commented out, or -1 when it could not copy.
+long comment_out_other_fans(const std::string& src, const std::string& dst)
+{
+    boost::nowide::ifstream in(src, std::ios::binary);
+    if (!in)
+        return -1;
+    boost::nowide::ofstream out(dst, std::ios::binary | std::ios::trunc);
+    if (!out)
+        return -1;
+    long commented = 0;
+    std::string line;
+    while (std::getline(in, line)) {
+        if (names_other_fan(line)) {
+            out << "; no such fan on this printer, not sent: ";
+            ++commented;
+        }
+        out << line << '\n';
+    }
+    out.flush();
+    if (!out || in.bad())
+        return -1;
+    return commented;
 }
 
 } // namespace
@@ -221,14 +283,15 @@ bool GPXExport::export_to_x3g(
         return fail("printer profile has no usable printable_area - refusing to write "
                     "an .x3g whose coordinates would land off the platform");
 
+    const std::string coords_gcode = output_filepath + ".coords.gcode";
     const std::string native_gcode = output_filepath + ".native.gcode";
     size_t            native_lines = 0;
     {
         std::string shift_error;
-        if (!MakerBotCoords::file_to_machine_coordinates(gcode_filepath, native_gcode,
+        if (!MakerBotCoords::file_to_machine_coordinates(gcode_filepath, coords_gcode,
                                                          centre, &shift_error, &native_lines)) {
             boost::system::error_code ec;
-            fs::remove(native_gcode, ec);
+            fs::remove(coords_gcode, ec);
             return fail("could not translate to machine coordinates: " + shift_error);
         }
     }
@@ -238,6 +301,23 @@ bool GPXExport::export_to_x3g(
         BOOST_LOG_TRIVIAL(warning) << "GPXExport: not a single MB_NATIVE line in this G-code - "
             "the printer will not be told its home offsets. The machine profile is older than "
             "this build; re-sync resources/profiles.";
+
+    // MakerBot / UltiMaker Fork: no auxiliary or exhaust fan commands - GPX
+    // would run the ABP belt or the part fan with them (names_other_fan()).
+    const long fan_lines = comment_out_other_fans(coords_gcode, native_gcode);
+    {
+        boost::system::error_code ec;
+        fs::remove(coords_gcode, ec);
+    }
+    if (fan_lines < 0) {
+        boost::system::error_code ec;
+        fs::remove(native_gcode, ec);
+        return fail("could not write " + native_gcode);
+    }
+    if (fan_lines > 0)
+        BOOST_LOG_TRIVIAL(warning) << "GPXExport: commented out " << fan_lines << " M106/M107 line(s) with a "
+            "fan index (auxiliary or exhaust fan): the printer has no such fan, and GPX would run the ABP "
+            "belt or the part fan with them";
 
     std::string error;
     GPX::ConvertStats stats;
