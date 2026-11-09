@@ -3959,6 +3959,10 @@ int CLI::run(int argc, char **argv)
                     nozzle_flush_dataset_full.resize(new_printer_variant_count, 0);
                 else
                     nozzle_flush_dataset_full.resize(1, 0);
+                // MakerBot / UltiMaker Fork: an empty list of variants keeps one
+                // default set, the one an extruder without its own falls back to.
+                if (nozzle_flush_dataset_full.empty())
+                    nozzle_flush_dataset_full.push_back(0);
 
                 std::vector<int> extruders;
                 if (m_print_config.has("extruder_type"))
@@ -3977,8 +3981,18 @@ int CLI::run(int argc, char **argv)
 
                 for (int eidx = 0; eidx < new_extruder_count; ++eidx) {
                     int index = 0;
-                    if (m_print_config.has("printer_extruder_id") && m_print_config.has("printer_extruder_variant"))
-                        index = m_print_config.get_index_for_extruder(eidx + 1, "printer_extruder_id", ExtruderType(extruders[eidx]), NozzleVolumeType(volume_types[eidx]), "printer_extruder_variant");
+                    if (m_print_config.has("printer_extruder_id") && m_print_config.has("printer_extruder_variant")) {
+                        // MakerBot / UltiMaker Fork: a list with a single value stands for every
+                        // extruder; reading past its end, or with a missing variant (-1), took
+                        // whatever lay in memory as the flush data of the second nozzle.
+                        const int extruder_type = extruders.empty() ? int(ExtruderType::etDirectDrive) :
+                                                  extruders[std::min<size_t>(eidx, extruders.size() - 1)];
+                        const int volume_type   = volume_types.empty() ? int(NozzleVolumeType::nvtStandard) :
+                                                  volume_types[std::min<size_t>(eidx, volume_types.size() - 1)];
+                        index = m_print_config.get_index_for_extruder(eidx + 1, "printer_extruder_id", ExtruderType(extruder_type), NozzleVolumeType(volume_type), "printer_extruder_variant");
+                    }
+                    if (index < 0 || index >= int(nozzle_flush_dataset_full.size()))
+                        index = 0;
                     nozzle_flush_dataset[eidx] = nozzle_flush_dataset_full[index];
                 }
             }
