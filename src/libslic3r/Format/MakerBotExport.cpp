@@ -140,6 +140,10 @@ struct HeaderData
     // the Method series: the toolpath knows five command types and none of
     // them carries acceleration.
     std::map<std::string, std::string> accel_raw;
+    // Which extruder each entry of such a list belongs to: Orca writes a
+    // setting with one value per extruder variant in the order of
+    // print_extruder_id, "1,2" for one variant on each of two extruders.
+    std::vector<int> print_extruder_id;
     // Gantry limits. Orca serialises these as "normal,stealth"; the first
     // entry is the normal mode. Defaults match Orca's own, not any machine.
     double      max_speed_x                  = 500.0; // machine_max_speed_x
@@ -425,7 +429,15 @@ static HeaderData parse_header(const std::string& gcode_path, const PrintConfig&
         else if (key == "enable_support")      h.enable_support                = parse_int_safe(val, h.enable_support);
         else if (key == "raft_layers")         h.raft_layers                   = parse_int_safe(val, h.raft_layers);
         else if (key == "filament_max_volumetric_speed") h.max_volumetric_speed = parse_double_safe(val, h.max_volumetric_speed);
-        else if (key == "default_acceleration") h.default_acceleration         = parse_double_safe(val, h.default_acceleration);
+        else if (key == "default_acceleration") {
+            h.default_acceleration = parse_double_safe(val, h.default_acceleration);
+            h.accel_raw[key]       = val;   // per extruder, see default_acceleration_of()
+        }
+        else if (key == "print_extruder_id") {
+            h.print_extruder_id.clear();
+            for (const std::string& part : split_list(val))
+                h.print_extruder_id.push_back(parse_int_safe(part, 0));
+        }
         else if (key == "travel_acceleration")  h.travel_acceleration          = parse_double_safe(val, h.travel_acceleration);
         else if (key == "outer_wall_acceleration"          ||
                  key == "inner_wall_acceleration"          ||
@@ -824,18 +836,43 @@ static std::string lava_material_id(const std::string& filament_type)
 // single acceleration_print setting. Our profiles differentiate five roles,
 // so this block is where the fork can actually do better than Cura.
 
-static double accel_from(const HeaderData& h, const char* key, double fallback)
+// The entry of an extruder (0-based) in a per-variant list such as
+// "500,300": the first variant print_extruder_id gives it. A block without
+// the list, or without a variant for the extruder, gives the first entry --
+// what the export wrote for every extruder before.
+static std::string entry_of_extruder(const HeaderData& h, const std::string& list, size_t extruder)
+{
+    size_t variant = 0;
+    for (size_t j = 0; j < h.print_extruder_id.size(); ++j)
+        if (h.print_extruder_id[j] == static_cast<int>(extruder) + 1) {
+            variant = j;
+            break;
+        }
+    const std::vector<std::string> entries = split_list(list);
+    return variant < entries.size() ? entries[variant] : entries.front();
+}
+
+static double default_acceleration_of(const HeaderData& h, size_t extruder)
+{
+    const auto it = h.accel_raw.find("default_acceleration");
+    if (it == h.accel_raw.end() || it->second.empty())
+        return h.default_acceleration;
+    const double v = parse_double_safe(entry_of_extruder(h, it->second, extruder), -1.0);
+    return v > 0.0 ? v : h.default_acceleration;
+}
+
+static double accel_from(const HeaderData& h, const char* key, double fallback, size_t extruder = 0)
 {
     const auto it = h.accel_raw.find(key);
     if (it == h.accel_raw.end() || it->second.empty())
         return fallback;
-    const std::string& s = it->second;
+    const std::string s = entry_of_extruder(h, it->second, extruder);
     const double v = parse_double_safe(s, -1.0);
     if (v < 0.0)
         return fallback;
     // Orca serialises a relative value as "50%" - percent of the default.
     if (s.find('%') != std::string::npos)
-        return h.default_acceleration * v / 100.0;
+        return default_acceleration_of(h, extruder) * v / 100.0;
     return v;
 }
 
@@ -874,15 +911,23 @@ static nlohmann::json build_accel_overrides(const HeaderData& h,
         bead["Travel Move"]["max_speed_change_mm_per_s"] =
             accel_xy(accel_from(h, "travel_jerk", jerk_def));
 
+    // The _0 roles belong to the first extruder, the _1 roles to the
+    // second, each with its own values where the profile gives them.
     const size_t n = extruder_count < 1 ? 1 : extruder_count;
     for (size_t i = 0; i < n; ++i) {
+        const double def_i  = default_acceleration_of(h, i);
+        // an extruder without a jerk of its own takes the first one's, as
+        // has_jerk does
+        const double jerk_own = accel_from(h, "default_jerk", 0.0, i);
+        const double jerk_i   = jerk_own > 0.0 ? jerk_own : jerk_def;
         for (const Rolle& r : kRollen) {
             const std::string tag = std::string(r.tag) + "_" + std::to_string(i);
-            const double a = r.accel_key ? accel_from(h, r.accel_key, def) : def;
+            const double a = r.accel_key ? accel_from(h, r.accel_key, def_i, i) : def_i;
             bead[tag]["rate_mm_per_s_sq"] = accel_xy(a);
             if (has_jerk) {
-                const double j = r.jerk_key ? accel_from(h, r.jerk_key, jerk_def)
-                                            : jerk_def;
+                // 0 is Orca's "no value of its own": the extruder's default
+                const double j_role = r.jerk_key ? accel_from(h, r.jerk_key, jerk_i, i) : jerk_i;
+                const double j      = j_role > 0.0 ? j_role : jerk_i;
                 bead[tag]["max_speed_change_mm_per_s"] = accel_xy(j);
             }
         }

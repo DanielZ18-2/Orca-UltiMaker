@@ -4,6 +4,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <boost/filesystem/operations.hpp>
+#include <boost/nowide/fstream.hpp>
 #include <nlohmann/json.hpp>
 
 #include "libslic3r/Format/MakerBotExport.hpp"
@@ -195,6 +196,48 @@ TEST_CASE("A Method print becomes a .makerbot archive with a toolpath", "[MakerB
     CHECK(meta.at("version").get<std::string>() == "3.0.0");
     CHECK(meta.at("bot_type").get<std::string>() == "lava_f");
     CHECK(meta.at("extruder_temperature").get<int>() == 225);
+}
+
+// Acceleration reaches a Method only through accel_overrides, with one set of
+// roles per extruder. A setting with a value for each extruder lands in the
+// roles of that extruder: the settings block lists the values in the order of
+// print_extruder_id. Without a variant of its own the second extruder takes
+// the first value, as every extruder did before.
+TEST_CASE("Each extruder of a Method gets its own accelerations", "[MakerBotExport]")
+{
+    const auto [ids, second] = GENERATE(table<std::string, double>({
+        {"1,2", 300.},
+        {"1,1", 500.},
+    }));
+    DYNAMIC_SECTION("print_extruder_id " << ids) {
+        ScopedTemporaryDir dir;
+        const std::string gcode_path = (dir.path() / "cube.gcode").string();
+        TriangleMesh cube = Test::cube(20);
+        cube.translate(90, 90, 0);
+        Print print;
+        Model model;
+        Test::init_print(std::vector<TriangleMesh>{cube}, print, model, makerbot_config({
+            {"gcode_flavor", "makerbot_lava"},
+            {"makerbot_bot_type", "lava_f"},
+            {"printer_model", "MakerBot Method X"},
+        }), nullptr, /*arrange=*/false);
+        print.process();
+        print.export_gcode(gcode_path, nullptr, nullptr);
+        // The lines of a two-extruder Method X, which a one-extruder slice
+        // cannot write; the export reads the last line of each setting.
+        {
+            boost::nowide::ofstream f(gcode_path, std::ios::app);
+            f << "; outer_wall_acceleration = 500,300\n"
+              << "; print_extruder_id = " << ids << "\n";
+        }
+        PrintConfig two_tools = print.config();
+        two_tools.set_deserialize_strict("smart_extruder_type", "mk14_hot;mk14_hot_s");
+        const std::string archive = MakerBotExport::pack_to_archive(gcode_path, two_tools);
+
+        const nlohmann::json bead = meta_json(Test::zip_entries(archive)).at("accel_overrides").at("bead_mode");
+        CHECK_THAT(bead.at("WALL_OUTER_0").at("rate_mm_per_s_sq").at("x").get<double>(), WithinAbs(500., 1e-9));
+        CHECK_THAT(bead.at("WALL_OUTER_1").at("rate_mm_per_s_sq").at("x").get<double>(), WithinAbs(second, 1e-9));
+    }
 }
 
 TEST_CASE("A Sketch print carries its G-code in the .makerbot archive", "[MakerBotExport]")
