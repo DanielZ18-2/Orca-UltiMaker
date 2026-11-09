@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-09 08:45+0000\n"
+"POT-Creation-Date: 2026-11-09 09:00+0000\n"
 "PO-Revision-Date: 2026-06-19 13:40+0700\n"
 "Last-Translator: Icezaza\n"
 "Language-Team: Thai\n"
@@ -15743,6 +15743,9 @@ msgstr "ช่วงอุณหภูมิหัวฉีดที่แนะ
 
 msgid "If you still want to print, you can enable the option in Preferences / Control / Slicing / Remove mixed temperature restriction."
 msgstr "หากคุณยังต้องการพิมพ์ คุณสามารถเปิดใช้งานตัวเลือกในการตั้งค่า / การควบคุม / การตัด / ลบข้อจำกัดอุณหภูมิแบบผสมได้"
+
+msgid "Belt printer mode is not available for MakerBot and UltiMaker printers."
+msgstr ""
 
 msgid "No extrusions under current settings."
 msgstr "ไม่มีการอัดขึ้นรูปภายใต้การตั้งค่าปัจจุบัน"

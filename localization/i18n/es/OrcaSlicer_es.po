@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-09 08:45+0000\n"
+"POT-Creation-Date: 2026-11-09 09:00+0000\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Ian A. Bassi <>\n"
 "Language-Team: \n"
@@ -15371,6 +15371,9 @@ msgstr "El rango de temperatura recomendado para la boquilla no es válido. El l
 
 msgid "If you still want to print, you can enable the option in Preferences / Control / Slicing / Remove mixed temperature restriction."
 msgstr "Si aún así quieres imprimir, puedes activar la opción en Preferencias / Control / Laminado / Eliminar restricción de temperaturas mixtas."
+
+msgid "Belt printer mode is not available for MakerBot and UltiMaker printers."
+msgstr ""
 
 msgid "No extrusions under current settings."
 msgstr "No hay extrusiones con los ajustes actuales."

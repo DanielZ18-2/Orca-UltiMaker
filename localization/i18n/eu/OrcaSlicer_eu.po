@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-09 08:45+0000\n"
+"POT-Creation-Date: 2026-11-09 09:00+0000\n"
 "PO-Revision-Date: 2026-10-19 18:56+0200\n"
 "Last-Translator: Manu Goiogana <mgoiogana@gmail.com>\n"
 "Language-Team: \n"
@@ -15532,6 +15532,9 @@ msgstr "Gomendatutako pitaren tenperatura-tartea baliogabea da. Beheko mugak goi
 
 msgid "If you still want to print, you can enable the option in Preferences / Control / Slicing / Remove mixed temperature restriction."
 msgstr "Hala ere inprimatu nahi baduzu, aukera hau gaitu dezakezu: Hobespenak / Kontrola / Xerratzea / Kendu tenperatura mistoen murrizketa."
+
+msgid "Belt printer mode is not available for MakerBot and UltiMaker printers."
+msgstr ""
 
 msgid "No extrusions under current settings."
 msgstr "Uneko ezarpenekin ez dago estrusiorik."

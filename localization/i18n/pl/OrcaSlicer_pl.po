@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OrcaSlicer 2.3.0-rc\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-09 08:45+0000\n"
+"POT-Creation-Date: 2026-11-09 09:00+0000\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Krzysztof Morga <<tlumaczeniebs@gmail.com>>\n"
 "Language-Team: \n"
@@ -16129,6 +16129,9 @@ msgstr "Nieprawidłowy zalecany zakres temperatur dyszy. Dolna granica musi być
 # AI Translated
 msgid "If you still want to print, you can enable the option in Preferences / Control / Slicing / Remove mixed temperature restriction."
 msgstr "Jeśli mimo to chcesz drukować, możesz włączyć opcję w Preferencje / Sterowanie / Cięcie / Usuń ograniczenie mieszanych temperatur."
+
+msgid "Belt printer mode is not available for MakerBot and UltiMaker printers."
+msgstr ""
 
 msgid "No extrusions under current settings."
 msgstr "Brak ekstruzji przy obecnych ustawieniach."

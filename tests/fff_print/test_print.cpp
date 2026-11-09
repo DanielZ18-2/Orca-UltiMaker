@@ -2448,3 +2448,23 @@ TEST_CASE("The belt build height check uses the compensated height", "[Print][be
     else
         CHECK(error.find(expected) != std::string::npos);
 }
+
+// MakerBot / UltiMaker Fork: none of these machines prints on a tilted belt,
+// and the exports of their formats would turn the sheared coordinates into a
+// print. Belt mode is refused for their flavors, before any other belt rule.
+TEST_CASE("Belt printer mode is refused for the MakerBot and UltiMaker flavors", "[Print][belt][validate]")
+{
+    const std::string flavor = GENERATE("makerbot_legacy", "makerbot_birdwing", "makerbot_lava",
+                                        "griffin", "cheetah", "ultigcode");
+    DYNAMIC_SECTION("gcode_flavor " << flavor) {
+        DynamicPrintConfig config = belt_test_config();
+        config.set_deserialize_strict({ { "gcode_flavor", flavor } });
+
+        Print print;
+        Model model;
+        init_print({ cube(20.) }, print, model, config);
+        const StringObjectException error = print.validate();
+        CHECK(error.string == "Belt printer mode is not available for MakerBot and UltiMaker printers.");
+        CHECK(error.opt_key == "belt_printer");
+    }
+}

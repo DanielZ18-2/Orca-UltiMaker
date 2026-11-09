@@ -1992,6 +1992,25 @@ StringObjectException Print::validate(std::vector<StringObjectException> *warnin
     if (m_objects.empty())
         return {std::string()};
 
+    // MakerBot / UltiMaker Fork: none of these machines prints on a tilted
+    // belt, and the exports of their formats would turn the sheared
+    // coordinates of belt mode into a print without a word. The Automated
+    // Build Platform of the Thing-O-Matic is a flat belt that only carries
+    // a finished part off the plate. Asked first: nothing else fits then.
+    if (m_config.belt_printer.value) {
+        switch (m_config.gcode_flavor.value) {
+        case gcfMakerBotLegacy:
+        case gcfMakerBotBirdwing:
+        case gcfMakerBotLava:
+        case gcfGriffin:
+        case gcfCheetah:
+        case gcfUltiGCode:
+            return { L("Belt printer mode is not available for MakerBot and UltiMaker printers."), nullptr, "belt_printer" };
+        default:
+            break;
+        }
+    }
+
     if (extruders.empty())
         return { L("No extrusions under current settings.") };
 

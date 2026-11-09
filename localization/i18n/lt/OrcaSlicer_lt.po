@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-09 08:45+0000\n"
+"POT-Creation-Date: 2026-11-09 09:00+0000\n"
 "PO-Revision-Date: 2026-07-02 14:13+0300\n"
 "Last-Translator: Gintaras Kučinskas <sharanchius@gmail.com>\n"
 "Language-Team: \n"
@@ -15817,6 +15817,9 @@ msgstr "Neteisingas rekomenduojamas purkštuko temperatūros diapazonas. Žemuti
 
 msgid "If you still want to print, you can enable the option in Preferences / Control / Slicing / Remove mixed temperature restriction."
 msgstr "Jei vis tiek norite spausdinti, galite įjungti šią parinktį skiltyje Nuostatos (Preferences) / Valdymas / Pjaustymas / Pašalinti mišrios temperatūros ribojimą."
+
+msgid "Belt printer mode is not available for MakerBot and UltiMaker printers."
+msgstr ""
 
 msgid "No extrusions under current settings."
 msgstr "Pagal dabartinius nustatymus nėra išspaudimų."

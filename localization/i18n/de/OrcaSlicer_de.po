@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-09 08:45+0000\n"
+"POT-Creation-Date: 2026-11-09 09:00+0000\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Heiko Liebscher <hliebschergmail.com>\n"
 "Language-Team: \n"
@@ -15710,6 +15710,9 @@ msgstr "Ungültiger empfohlener Düsentemperaturbereich. Die untere Grenze muss 
 
 msgid "If you still want to print, you can enable the option in Preferences / Control / Slicing / Remove mixed temperature restriction."
 msgstr "Wenn Sie trotzdem drucken möchten, können Sie die Option in Einstellungen / Steuerung / Schneiden / Entfernen der gemischten Temperaturbeschränkung aktivieren."
+
+msgid "Belt printer mode is not available for MakerBot and UltiMaker printers."
+msgstr "Der Förderbanddrucker-Modus ist für MakerBot- und UltiMaker-Drucker nicht verfügbar."
 
 msgid "No extrusions under current settings."
 msgstr "Keine Extrusion unter den aktuellen Einstellungen."
