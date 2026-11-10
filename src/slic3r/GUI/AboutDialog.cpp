@@ -338,7 +338,7 @@ AboutDialog::AboutDialog()
     // The upstream copyright notice stays: the code is theirs.
     const wxString about_origin =
         _L("Unofficial fork for MakerBot and UltiMaker - not affiliated with the OrcaSlicer project.")
-        + "\n" + "github.com/DanielZ18-2/Orca-MakerBot-UltiMaker"
+        + "\n" + "github.com/DanielZ18-2/Orca-UltiMaker"
         + "\n" + _L("Copyright(C) 2026 OrcaSlicer Pte Ltd All Rights Reserved");
     wxStaticText *html_text = new wxStaticText(this, wxID_ANY, about_origin, wxDefaultPosition, wxDefaultSize);
     html_text->SetForegroundColour(wxColour(107, 107, 107));

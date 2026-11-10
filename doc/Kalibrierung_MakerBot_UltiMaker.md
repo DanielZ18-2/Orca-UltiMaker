@@ -1,7 +1,7 @@
 # Filamentkalibrierung auf MakerBot- und UltiMaker-Druckern
 
 Stand 21.08.2026 · gilt für den Fork
-`DanielZ18-2/Orca-MakerBot-UltiMaker`, Zweig
+`DanielZ18-2/Orca-UltiMaker`, Zweig
 `feature/makerbot-ultimaker-native-support`
 
 > **Überholt in Teilen.** Die aktuelle Fassung zum Stand von Test 2

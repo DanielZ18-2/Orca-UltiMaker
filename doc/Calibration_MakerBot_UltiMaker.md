@@ -1,6 +1,6 @@
 # Filament calibration on MakerBot and UltiMaker printers
 
-For test build [`v2026.9.0-test2`](https://github.com/DanielZ18-2/Orca-MakerBot-UltiMaker/releases/tag/v2026.9.0-test2)
+For test build [`v2026.9.0-test2`](https://github.com/DanielZ18-2/Orca-UltiMaker/releases/tag/v2026.9.0-test2)
 of this unofficial OrcaSlicer fork. Which printers belong to which class is listed in
 [SUPPORTED_PRINTERS.md](SUPPORTED_PRINTERS.md).
 

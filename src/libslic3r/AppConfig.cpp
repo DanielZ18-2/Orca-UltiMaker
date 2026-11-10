@@ -67,11 +67,11 @@ namespace Slic3r {
 // parses (tag_name, prerelease, html_url, body), so no parsing change is needed.
 // The list form is used on purpose: it also surfaces pre-releases, which is what
 // a test series needs.
-static const std::string VERSION_CHECK_URL = "https://api.github.com/repos/DanielZ18-2/Orca-MakerBot-UltiMaker/releases";
+static const std::string VERSION_CHECK_URL = "https://api.github.com/repos/DanielZ18-2/Orca-UltiMaker/releases";
 // Profile bundles ship with the application; the vendor check has never
 // succeeded against the upstream service. Pointing it at the same endpoint
 // keeps it harmless and stops the data from leaving for a third party.
-static const std::string PROFILE_UPDATE_URL = "https://api.github.com/repos/DanielZ18-2/Orca-MakerBot-UltiMaker/releases";
+static const std::string PROFILE_UPDATE_URL = "https://api.github.com/repos/DanielZ18-2/Orca-UltiMaker/releases";
 
 constexpr const char* CONFIG_ORCA_UPDATER_URL = "orca_updater_url";
 

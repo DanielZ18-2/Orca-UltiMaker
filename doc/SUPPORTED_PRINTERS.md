@@ -1,7 +1,7 @@
 # Supported printers
 
 Printers with machine, filament and process profiles in this fork, as of test build
-[`v2026.9.0-test2`](https://github.com/DanielZ18-2/Orca-MakerBot-UltiMaker/releases/tag/v2026.9.0-test2).
+[`v2026.9.0-test2`](https://github.com/DanielZ18-2/Orca-UltiMaker/releases/tag/v2026.9.0-test2).
 **39 models: 19 MakerBot, 20 UltiMaker.**
 
 **Printed on real hardware with this build: Replicator Z18 and Replicator 2X** (marked ✔).
@@ -105,5 +105,5 @@ Both entries use the same Method firmware dialect and machine identifiers.
 How to calibrate filaments on these printers, and which calibrations have an effect on
 which of them: [Calibration_MakerBot_UltiMaker.md](Calibration_MakerBot_UltiMaker.md).
 
-See the [release notes](https://github.com/DanielZ18-2/Orca-MakerBot-UltiMaker/releases/tag/v2026.9.0-test2)
+See the [release notes](https://github.com/DanielZ18-2/Orca-UltiMaker/releases/tag/v2026.9.0-test2)
 for what changed since test 1 and the known limitations.
